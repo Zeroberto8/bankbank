@@ -251,8 +251,9 @@ export default function App() {
   const bk = { background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 20, fontSize: 13, fontFamily: "system-ui", cursor: "pointer", marginBottom: 14 };
 
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", background: T.bg, color: T.txt, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div className="bb-root" style={{ fontFamily: "system-ui, sans-serif", background: T.bg, color: T.txt, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
+        .bb-root { height: 100vh; height: 100dvh; }
         .pulse { animation: p 2s ease-out infinite; }
         @keyframes p { 0%{transform:scale(.5);opacity:.8} 100%{transform:scale(1.8);opacity:0} }
         input:focus,textarea:focus{border-color:${T.pri} !important}
@@ -411,11 +412,11 @@ export default function App() {
       )}
 
       {/* NAV */}
-      <div style={{ display: "flex", background: "#fff", borderTop: `1px solid ${T.brd}`, padding: "4px 0 8px", flexShrink: 0 }}>
-        {[["map","🗺️","Karte"],["list","📋","Liste"],["add","➕","Neu"],["profile","👤","Profil"]].map(([id, ic, lb]) => (
-          <button key={id} onClick={() => { if (id === "add") { setAddMode(true); setView("map"); } else if (id === "profile") flash("Profil kommt bald! 👤"); else { setView(id); setAddMode(false); } }}
-            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "4px 0", background: "none", border: "none", color: view === id ? T.pri : T.mut, fontSize: 9, fontWeight: view === id ? 700 : 500, cursor: "pointer" }}>
-            {id === "add" ? <span style={{ fontSize: 15, background: T.pri, color: "#fff", width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{ic}</span> : <span style={{ fontSize: 18 }}>{ic}</span>}
+      <div style={{ display: "flex", background: "#fff", borderTop: `1px solid ${T.brd}`, padding: "6px 0", paddingBottom: "max(8px, env(safe-area-inset-bottom))", flexShrink: 0 }}>
+        {[["map","🗺️","Karte"],["list","📋","Liste"],["profile","👤","Profil"]].map(([id, ic, lb]) => (
+          <button key={id} onClick={() => { if (id === "profile") flash("Profil kommt bald! 👤"); else { setView(id); setAddMode(false); } }}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0", background: "none", border: "none", color: view === id ? T.pri : T.mut, fontSize: 10, fontWeight: view === id ? 700 : 500, cursor: "pointer" }}>
+            <span style={{ fontSize: 22 }}>{ic}</span>
             {lb}
           </button>
         ))}
