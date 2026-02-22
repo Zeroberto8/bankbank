@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 const BENCHES = [
   { id: 1, lat: 52.52, lng: 13.405, title: "Tiergarten Lieblingsbank", description: "Wunderschöne Bank am See mit Blick auf die Fontäne. Perfekt für die Mittagspause.", photo: null, user: "Anna M.", date: "2025-01-15", ratings: [5, 4, 5, 4], comments: [{ user: "Tom K.", text: "Mein absoluter Lieblingsplatz! 🌿", date: "2025-01-20", rating: 5 }, { user: "Lisa R.", text: "Sehr ruhig und schattig im Sommer.", date: "2025-02-01", rating: 4 }] },
@@ -9,14 +9,6 @@ const BENCHES = [
   { id: 6, lat: 48.775, lng: 9.183, title: "Schlossplatz Stuttgart", description: "Steinbank mit Blick auf das Neue Schloss.", photo: null, user: "Lena K.", date: "2025-02-10", ratings: [4, 4, 5], comments: [] },
   { id: 7, lat: 51.05, lng: 13.738, title: "Elbwiesen Dresden", description: "Holzbank mit Blick auf die Altstadt-Silhouette.", photo: null, user: "Felix W.", date: "2025-01-22", ratings: [5, 5, 5, 4], comments: [] },
   { id: 8, lat: 49.453, lng: 11.077, title: "Burggarten Nürnberg", description: "Alte Steinbank mit Panoramablick.", photo: null, user: "Jan H.", date: "2025-02-15", ratings: [4, 5, 4], comments: [] },
-];
-
-const DE = [[8.1,55],[8.5,54.5],[9,54.8],[9.5,54.75],[10,54.35],[10.4,54.6],[11,54.35],[11.5,54.5],[12,54.4],[12.5,54.5],[13,54.3],[13.5,54.35],[14,54.3],[14.3,53.9],[14.5,53.5],[14.7,53],[14.6,52.5],[14.7,52],[14.7,51.5],[15,51],[14.9,50.9],[14.7,51],[14.3,50.8],[13.9,50.7],[13.5,50.4],[13,50.5],[12.5,50.4],[12.2,50.2],[12.5,50],[12.8,49.8],[13,49.5],[13.2,49],[13,48.8],[13.5,48.5],[13.8,48.7],[13.8,48.2],[13,47.5],[12.7,47.6],[12,47.7],[11.5,47.5],[11,47.4],[10.5,47.5],[10,47.3],[9.6,47.5],[9.5,47.6],[9,47.5],[8.5,47.6],[8,47.5],[7.5,47.6],[7.5,48],[7.5,48.5],[7.8,48.5],[8,49],[7.5,49.5],[7,49.5],[6.5,49.5],[6.3,49.8],[6.2,50],[6.3,50.3],[6.5,50.5],[6,50.8],[6,51],[5.9,51.5],[6,51.8],[6.2,52],[6.7,52],[7,52.5],[6.7,53],[7,53.5],[7.2,53.7],[8,54],[8,54.3],[8.3,54.6],[8.5,55]];
-
-const CITIES = [
-  ["Berlin",52.52,13.405],["München",48.137,11.575],["Hamburg",53.551,9.994],["Köln",50.938,6.96],
-  ["Frankfurt",50.11,8.68],["Stuttgart",48.775,9.183],["Dresden",51.05,13.738],["Leipzig",51.34,12.373],
-  ["Nürnberg",49.453,11.077],["Hannover",52.375,9.732],["Bremen",53.08,8.80],["Düsseldorf",51.23,6.78],
 ];
 
 const avg = (r) => r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) : "–";
@@ -38,6 +30,13 @@ const Stars = ({ rating, size = 16, interactive, onRate }) => {
 const T = { bg: "#F7F3ED", pri: "#4A7C28", priDk: "#2D5016", acc: "#E8A838", txt: "#2C2416", mut: "#8C7E6A", brd: "#E8E0D4" };
 const btnStyle = { width: 44, height: 44, borderRadius: 12, border: "none", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", display: "flex", alignItems: "center", justifyContent: "center" };
 
+// Mercator projection helpers
+const lat2world = (lat) => {
+  const r = lat * Math.PI / 180;
+  return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2;
+};
+const world2lat = (y) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
+
 export default function App() {
   const [benches, setBenches] = useState(BENCHES);
   const [view, setView] = useState("map");
@@ -56,15 +55,16 @@ export default function App() {
   // Map state
   const [cLng, setCLng] = useState(10.4);
   const [cLat, setCLat] = useState(51.2);
-  const [dpp, setDpp] = useState(null); // degrees per pixel, null=auto
+  const [zoom, setZoom] = useState(6);
   const [mapSize, setMapSize] = useState({ w: 400, h: 600 });
   const mapRef = useRef(null);
   const dragRef = useRef(null);
+  const touchRef = useRef(null);
+  const zoomRef = useRef(6);
   const [flewToUser, setFlewToUser] = useState(false);
 
-  // Auto-fit dpp
-  const autoDpp = Math.max(11 / (mapSize.w * 0.85), 9 / (mapSize.h * 0.85));
-  const curDpp = dpp || autoDpp;
+  zoomRef.current = zoom;
+  const worldSize = 256 * Math.pow(2, zoom);
 
   // Measure map container
   useEffect(() => {
@@ -92,39 +92,50 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // Fly to user
+  // Fly to user on first GPS fix
   useEffect(() => {
     if (userPos && !flewToUser && mapSize.w > 50) {
       setCLat(userPos.lat); setCLng(userPos.lng);
-      setDpp(autoDpp * 0.3);
+      setZoom(13);
       setFlewToUser(true);
     }
-  }, [userPos, flewToUser, mapSize, autoDpp]);
+  }, [userPos, flewToUser, mapSize]);
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-  const geo2px = useCallback((lat, lng) => ({
-    x: mapSize.w / 2 + (lng - cLng) / curDpp,
-    y: mapSize.h / 2 - (lat - cLat) / curDpp,
-  }), [mapSize, cLng, cLat, curDpp]);
+  // Mercator geo <-> pixel conversion
+  const geo2px = useCallback((lat, lng) => {
+    const cxW = (cLng + 180) / 360 * worldSize;
+    const cyW = lat2world(cLat) * worldSize;
+    const xW = (lng + 180) / 360 * worldSize;
+    const yW = lat2world(lat) * worldSize;
+    return { x: mapSize.w / 2 + (xW - cxW), y: mapSize.h / 2 + (yW - cyW) };
+  }, [mapSize, cLng, cLat, worldSize]);
 
-  const px2geo = useCallback((px, py) => ({
-    lng: cLng + (px - mapSize.w / 2) * curDpp,
-    lat: cLat - (py - mapSize.h / 2) * curDpp,
-  }), [mapSize, cLng, cLat, curDpp]);
+  const px2geo = useCallback((px, py) => {
+    const cxW = (cLng + 180) / 360 * worldSize;
+    const cyW = lat2world(cLat) * worldSize;
+    const xW = cxW + (px - mapSize.w / 2);
+    const yW = cyW + (py - mapSize.h / 2);
+    return { lng: xW / worldSize * 360 - 180, lat: world2lat(yW / worldSize) };
+  }, [mapSize, cLng, cLat, worldSize]);
 
-  // Drag handlers
+  // Drag handlers (pointer events for mouse + single-finger touch)
   const onPtrDown = (e) => {
     if (e.target.closest("[data-pin]") || e.target.closest("[data-btn]")) return;
+    if (touchRef.current?.type === "pinch") return;
     dragRef.current = { sx: e.clientX, sy: e.clientY, sLng: cLng, sLat: cLat, moved: false };
     mapRef.current?.setPointerCapture(e.pointerId);
   };
   const onPtrMove = (e) => {
-    if (!dragRef.current) return;
+    if (!dragRef.current || touchRef.current?.type === "pinch") return;
     const dx = e.clientX - dragRef.current.sx, dy = e.clientY - dragRef.current.sy;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragRef.current.moved = true;
-    setCLng(dragRef.current.sLng - dx * curDpp);
-    setCLat(dragRef.current.sLat + dy * curDpp);
+    const ws = 256 * Math.pow(2, zoomRef.current);
+    const sxW = (dragRef.current.sLng + 180) / 360 * ws;
+    const syW = lat2world(dragRef.current.sLat) * ws;
+    setCLng((sxW - dx) / ws * 360 - 180);
+    setCLat(world2lat((syW - dy) / ws));
   };
   const onPtrUp = (e) => {
     const wasDrag = dragRef.current?.moved;
@@ -135,14 +146,88 @@ export default function App() {
       setNewPos(g); setAddMode(false); setView("add");
     }
   };
+
+  // Wheel zoom
   const onWhl = (e) => {
     e.preventDefault();
-    setDpp(prev => {
-      const c = prev || curDpp;
-      const n = c * (e.deltaY > 0 ? 1.25 : 0.8);
-      return (n < 0.002 || n > 0.08) ? c : n;
+    setZoom(prev => {
+      const n = prev + (e.deltaY > 0 ? -0.3 : 0.3);
+      return Math.max(4, Math.min(18, n));
     });
   };
+
+  // Pinch-to-zoom (touch events)
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el || view !== "map") return;
+
+    const onTS = (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        touchRef.current = { type: "pinch", dist, startZoom: zoomRef.current };
+        dragRef.current = null;
+      }
+    };
+
+    const onTM = (e) => {
+      if (e.touches.length === 2 && touchRef.current?.type === "pinch") {
+        e.preventDefault();
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const scale = dist / touchRef.current.dist;
+        setZoom(Math.max(4, Math.min(18, touchRef.current.startZoom + Math.log2(scale))));
+      }
+    };
+
+    const onTE = () => { touchRef.current = null; };
+
+    el.addEventListener("touchstart", onTS, { passive: false });
+    el.addEventListener("touchmove", onTM, { passive: false });
+    el.addEventListener("touchend", onTE);
+
+    return () => {
+      el.removeEventListener("touchstart", onTS);
+      el.removeEventListener("touchmove", onTM);
+      el.removeEventListener("touchend", onTE);
+    };
+  }, [view]);
+
+  // Compute visible tiles
+  const tiles = useMemo(() => {
+    const z = Math.max(0, Math.min(18, Math.round(zoom)));
+    const numTiles = Math.pow(2, z);
+    const tilePixelSize = worldSize / numTiles;
+
+    const cxW = (cLng + 180) / 360 * worldSize;
+    const cyW = lat2world(cLat) * worldSize;
+
+    const tlWx = cxW - mapSize.w / 2;
+    const tlWy = cyW - mapSize.h / 2;
+
+    const startTx = Math.floor(tlWx / tilePixelSize);
+    const startTy = Math.max(0, Math.floor(tlWy / tilePixelSize));
+    const endTx = Math.ceil((tlWx + mapSize.w) / tilePixelSize);
+    const endTy = Math.min(numTiles - 1, Math.ceil((tlWy + mapSize.h) / tilePixelSize));
+
+    const result = [];
+    const subs = ["a", "b", "c"];
+    for (let tx = startTx; tx <= endTx; tx++) {
+      for (let ty = startTy; ty <= endTy; ty++) {
+        const wtx = ((tx % numTiles) + numTiles) % numTiles;
+        const px = mapSize.w / 2 + (tx * tilePixelSize - cxW);
+        const py = mapSize.h / 2 + (ty * tilePixelSize - cyW);
+        const sub = subs[(wtx + ty) % 3];
+        result.push({
+          key: `${z}/${wtx}/${ty}`,
+          url: `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${z}/${wtx}/${ty}@2x.png`,
+          x: px, y: py, size: tilePixelSize,
+        });
+      }
+    }
+    return result;
+  }, [zoom, cLng, cLat, mapSize, worldSize]);
 
   const addBench = () => {
     if (!newTitle.trim() || !newPos) return;
@@ -161,9 +246,6 @@ export default function App() {
   const onPhoto = (e) => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setNewPhoto(ev.target.result); r.readAsDataURL(f); } };
 
   const filtered = benches.filter(b => b.title.toLowerCase().includes(search.toLowerCase()) || b.description.toLowerCase().includes(search.toLowerCase()));
-
-  // Germany outline SVG path
-  const dePath = DE.map((c, i) => { const p = geo2px(c[1], c[0]); return `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`; }).join(" ") + "Z";
 
   const inp = { width: "100%", padding: 12, borderRadius: 12, border: `2px solid ${T.brd}`, fontSize: 14, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", boxSizing: "border-box" };
   const bk = { background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 20, fontSize: 13, fontFamily: "system-ui", cursor: "pointer", marginBottom: 14 };
@@ -191,21 +273,14 @@ export default function App() {
         <div ref={mapRef} style={{ flex: 1, position: "relative", overflow: "hidden", touchAction: "none", cursor: addMode ? "crosshair" : "grab", background: "#dce8f1", userSelect: "none" }}
           onPointerDown={onPtrDown} onPointerMove={onPtrMove} onPointerUp={onPtrUp} onWheel={onWhl}>
 
-          <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-            <path d={dePath} fill="#eae6dd" stroke="#c5bfb3" strokeWidth="2" strokeLinejoin="round" />
-          </svg>
+          {/* OSM Tiles */}
+          {tiles.map(t => (
+            <img key={t.key} src={t.url} alt="" draggable={false}
+              style={{ position: "absolute", left: t.x, top: t.y, width: t.size, height: t.size, pointerEvents: "none", imageRendering: "auto" }}
+            />
+          ))}
 
-          {CITIES.map(([n, lt, ln]) => {
-            const p = geo2px(lt, ln);
-            if (p.x < -50 || p.x > mapSize.w + 50 || p.y < -50 || p.y > mapSize.h + 50) return null;
-            return (
-              <div key={n} style={{ position: "absolute", left: p.x, top: p.y, transform: "translate(-50%,-50%)", pointerEvents: "none", textAlign: "center" }}>
-                <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#aaa", margin: "0 auto 2px" }} />
-                <div style={{ fontSize: 10, color: "#888", fontWeight: 500, whiteSpace: "nowrap", textShadow: "0 0 3px #fff, 0 0 3px #fff" }}>{n}</div>
-              </div>
-            );
-          })}
-
+          {/* Bench pins */}
           {benches.map(b => {
             const p = geo2px(b.lat, b.lng);
             if (p.x < -40 || p.x > mapSize.w + 40 || p.y < -60 || p.y > mapSize.h + 20) return null;
@@ -222,6 +297,7 @@ export default function App() {
             );
           })}
 
+          {/* User position */}
           {userPos && (() => {
             const p = geo2px(userPos.lat, userPos.lng);
             return (p.x > -30 && p.x < mapSize.w + 30 && p.y > -30 && p.y < mapSize.h + 30) ? (
@@ -236,8 +312,8 @@ export default function App() {
 
           {/* Buttons rechts unten */}
           <div data-btn="1" style={{ position: "absolute", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
-            <button onClick={() => { setCLng(10.4); setCLat(51.2); setDpp(null); flash("🇩🇪 Ganz Deutschland"); }} style={{ ...btnStyle, background: "#fff", color: "#666" }}>🇩🇪</button>
-            <button onClick={() => { if (userPos) { setCLat(userPos.lat); setCLng(userPos.lng); setDpp(autoDpp * 0.3); flash("📍 Dein Standort"); } }} style={{ ...btnStyle, background: "#fff", color: userPos ? "#4285F4" : "#aaa" }}>◎</button>
+            <button onClick={() => { setCLng(10.4); setCLat(51.2); setZoom(6); flash("🇩🇪 Ganz Deutschland"); }} style={{ ...btnStyle, background: "#fff", color: "#666" }}>🇩🇪</button>
+            <button onClick={() => { if (userPos) { setCLat(userPos.lat); setCLng(userPos.lng); setZoom(13); flash("📍 Dein Standort"); } }} style={{ ...btnStyle, background: "#fff", color: userPos ? "#4285F4" : "#aaa" }}>◎</button>
             <button onClick={() => setAddMode(true)} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
           </div>
 
@@ -248,7 +324,7 @@ export default function App() {
             </div>
           )}
 
-          <div style={{ position: "absolute", bottom: 4, left: 4, fontSize: 8, color: "#999", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3 }}>© BankBank</div>
+          <div style={{ position: "absolute", bottom: 4, left: 4, fontSize: 8, color: "#666", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3, zIndex: 10 }}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenStreetMap</a> © <a href="https://carto.com/" target="_blank" rel="noreferrer" style={{ color: "#666" }}>CARTO</a></div>
         </div>
       )}
 
