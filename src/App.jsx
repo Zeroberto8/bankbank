@@ -21,7 +21,7 @@ function AppContent() {
   const [addMode, setAddMode] = useState(false)
   const [newBenchPos, setNewBenchPos] = useState(null)
   const [toast, setToast] = useState(null)
-  const [flyTo, setFlyTo] = useState(null)
+
 
   const showToast = (msg) => {
     setToast(msg)
@@ -135,10 +135,8 @@ function AppContent() {
               <MapView
                 benches={benches}
                 onBenchClick={handleBenchClick}
-                selectedBench={selectedBench}
                 addMode={addMode}
                 onMapClick={handleMapClick}
-                flyTo={flyTo}
               />
             )}
 
