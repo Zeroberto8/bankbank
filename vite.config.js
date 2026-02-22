@@ -8,7 +8,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          leaflet: ['leaflet', 'react-leaflet'],
           supabase: ['@supabase/supabase-js'],
         },
       },
