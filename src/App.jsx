@@ -1,178 +1,351 @@
-import { useState, useCallback } from 'react'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { useBenches } from './hooks/useBenches'
-import Header from './components/Header'
-import BottomNav from './components/BottomNav'
-import MapView from './components/MapView'
-import BenchDetail from './components/BenchDetail'
-import AddBench from './components/AddBench'
-import ListView from './components/ListView'
-import NearbyView from './components/NearbyView'
-import Auth from './components/Auth'
-import Profile from './components/Profile'
-import Toast from './components/Toast'
+import { useState, useEffect, useRef, useCallback } from "react";
 
-function AppContent() {
-  const { user } = useAuth()
-  const { benches, loading, addBench, addReview } = useBenches()
+const BENCHES = [
+  { id: 1, lat: 52.52, lng: 13.405, title: "Tiergarten Lieblingsbank", description: "Wunderschöne Bank am See mit Blick auf die Fontäne. Perfekt für die Mittagspause.", photo: null, user: "Anna M.", date: "2025-01-15", ratings: [5, 4, 5, 4], comments: [{ user: "Tom K.", text: "Mein absoluter Lieblingsplatz! 🌿", date: "2025-01-20", rating: 5 }, { user: "Lisa R.", text: "Sehr ruhig und schattig im Sommer.", date: "2025-02-01", rating: 4 }] },
+  { id: 2, lat: 48.137, lng: 11.575, title: "Englischer Garten Panorama", description: "Holzbank auf dem kleinen Hügel mit 360° Blick über den Park.", photo: null, user: "Max B.", date: "2025-02-03", ratings: [5, 5, 5], comments: [{ user: "Sarah W.", text: "Sonnenuntergang hier ist magisch! 🌅", date: "2025-02-10", rating: 5 }] },
+  { id: 3, lat: 50.938, lng: 6.96, title: "Rheinufer Köln Deutz", description: "Moderne Bank direkt am Rhein mit Blick auf den Dom.", photo: null, user: "Julia F.", date: "2025-01-28", ratings: [4, 5, 4, 5, 4], comments: [{ user: "Chris P.", text: "Perfekter Spot für ein Feierabendbier.", date: "2025-02-05", rating: 4 }] },
+  { id: 4, lat: 53.551, lng: 9.994, title: "Alster-Uferbank", description: "Klassische weiße Holzbank an der Außenalster. Segelboote beobachten inklusive.", photo: null, user: "Henrik S.", date: "2025-01-10", ratings: [5, 4, 5], comments: [] },
+  { id: 5, lat: 51.34, lng: 12.373, title: "Clara-Zetkin-Park Lesebank", description: "Versteckte Bank zwischen alten Eichen.", photo: null, user: "Mia T.", date: "2025-02-08", ratings: [5, 5, 4, 5], comments: [{ user: "Paul D.", text: "Geheimtipp!", date: "2025-02-14", rating: 5 }] },
+  { id: 6, lat: 48.775, lng: 9.183, title: "Schlossplatz Stuttgart", description: "Steinbank mit Blick auf das Neue Schloss.", photo: null, user: "Lena K.", date: "2025-02-10", ratings: [4, 4, 5], comments: [] },
+  { id: 7, lat: 51.05, lng: 13.738, title: "Elbwiesen Dresden", description: "Holzbank mit Blick auf die Altstadt-Silhouette.", photo: null, user: "Felix W.", date: "2025-01-22", ratings: [5, 5, 5, 4], comments: [] },
+  { id: 8, lat: 49.453, lng: 11.077, title: "Burggarten Nürnberg", description: "Alte Steinbank mit Panoramablick.", photo: null, user: "Jan H.", date: "2025-02-15", ratings: [4, 5, 4], comments: [] },
+];
 
-  const [view, setView] = useState('map')
-  const [selectedBench, setSelectedBench] = useState(null)
-  const [addMode, setAddMode] = useState(false)
-  const [newBenchPos, setNewBenchPos] = useState(null)
-  const [toast, setToast] = useState(null)
-  const [flyTo, setFlyTo] = useState(null)
+const DE = [[8.1,55],[8.5,54.5],[9,54.8],[9.5,54.75],[10,54.35],[10.4,54.6],[11,54.35],[11.5,54.5],[12,54.4],[12.5,54.5],[13,54.3],[13.5,54.35],[14,54.3],[14.3,53.9],[14.5,53.5],[14.7,53],[14.6,52.5],[14.7,52],[14.7,51.5],[15,51],[14.9,50.9],[14.7,51],[14.3,50.8],[13.9,50.7],[13.5,50.4],[13,50.5],[12.5,50.4],[12.2,50.2],[12.5,50],[12.8,49.8],[13,49.5],[13.2,49],[13,48.8],[13.5,48.5],[13.8,48.7],[13.8,48.2],[13,47.5],[12.7,47.6],[12,47.7],[11.5,47.5],[11,47.4],[10.5,47.5],[10,47.3],[9.6,47.5],[9.5,47.6],[9,47.5],[8.5,47.6],[8,47.5],[7.5,47.6],[7.5,48],[7.5,48.5],[7.8,48.5],[8,49],[7.5,49.5],[7,49.5],[6.5,49.5],[6.3,49.8],[6.2,50],[6.3,50.3],[6.5,50.5],[6,50.8],[6,51],[5.9,51.5],[6,51.8],[6.2,52],[6.7,52],[7,52.5],[6.7,53],[7,53.5],[7.2,53.7],[8,54],[8,54.3],[8.3,54.6],[8.5,55]];
 
-  const showToast = (msg) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 2500)
-  }
+const CITIES = [
+  ["Berlin",52.52,13.405],["München",48.137,11.575],["Hamburg",53.551,9.994],["Köln",50.938,6.96],
+  ["Frankfurt",50.11,8.68],["Stuttgart",48.775,9.183],["Dresden",51.05,13.738],["Leipzig",51.34,12.373],
+  ["Nürnberg",49.453,11.077],["Hannover",52.375,9.732],["Bremen",53.08,8.80],["Düsseldorf",51.23,6.78],
+];
 
-  const handleBenchClick = useCallback((bench) => {
-    setSelectedBench(bench)
-    setView('detail')
-  }, [])
+const avg = (r) => r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) : "–";
 
-  const handleMapClick = useCallback((pos) => {
-    if (!pos) {
-      setAddMode(false)
-      return
-    }
-    setNewBenchPos(pos)
-    setAddMode(false)
-    setView('addForm')
-  }, [])
-
-  const handleNavigate = (target) => {
-    if (target === 'add') {
-      if (!user) {
-        showToast('Bitte melde dich an, um eine Bank hinzuzufügen.')
-        setView('profile')
-        return
-      }
-      setAddMode(true)
-      setView('map')
-      return
-    }
-    if (target === 'profile') {
-      setView(user ? 'profile' : 'auth')
-      return
-    }
-    setAddMode(false)
-    setView(target)
-  }
-
-  const handleAddBench = async ({ title, description, lat, lng, photoFile }) => {
-    if (!user) return
-    try {
-      await addBench({ title, description, lat, lng, photoFile, userId: user.id })
-      setView('map')
-      setNewBenchPos(null)
-      showToast('\uD83E\uDE91 Bank erfolgreich hinzugefügt!')
-    } catch (err) {
-      showToast('Fehler: ' + err.message)
-    }
-  }
-
-  const handleAddReview = async ({ benchId, userId, rating, comment }) => {
-    try {
-      await addReview({ benchId, userId, rating, comment })
-      const updated = benches.find((b) => b.id === benchId)
-      if (updated) setSelectedBench(updated)
-      showToast('Bewertung gespeichert! \u2B50')
-    } catch (err) {
-      showToast('Fehler: ' + err.message)
-    }
-  }
-
-  const handleBenchClickFromList = (bench) => {
-    setSelectedBench(bench)
-    setView('detail')
-  }
-
-  const activeNavView = ['map', 'addForm'].includes(view)
-    ? 'map'
-    : ['auth', 'profile'].includes(view)
-      ? 'profile'
-      : view === 'detail'
-        ? 'map'
-        : view
-
+const Stars = ({ rating, size = 16, interactive, onRate }) => {
+  const [h, setH] = useState(0);
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden font-serif">
-      <Header benchCount={benches.length} />
-
-      {/* Main content */}
-      <div className="relative flex flex-1 flex-col overflow-hidden">
-        {view === 'detail' ? (
-          <BenchDetail
-            bench={selectedBench}
-            onBack={() => { setView('map'); setSelectedBench(null) }}
-            onAddReview={handleAddReview}
-          />
-        ) : view === 'addForm' ? (
-          <AddBench
-            position={newBenchPos}
-            onSubmit={handleAddBench}
-            onCancel={() => { setView('map'); setNewBenchPos(null) }}
-          />
-        ) : view === 'list' ? (
-          <ListView benches={benches} onBenchClick={handleBenchClickFromList} />
-        ) : view === 'nearby' ? (
-          <NearbyView benches={benches} onBenchClick={handleBenchClickFromList} />
-        ) : view === 'auth' ? (
-          <Auth onClose={() => setView('map')} />
-        ) : view === 'profile' ? (
-          user ? <Profile /> : <Auth onClose={() => setView('map')} />
-        ) : (
-          /* Map view (default) */
-          <div className="relative flex-1">
-            {loading ? (
-              <div className="flex h-full items-center justify-center font-sans text-text-muted">
-                Bänke werden geladen...
-              </div>
-            ) : (
-              <MapView
-                benches={benches}
-                onBenchClick={handleBenchClick}
-                selectedBench={selectedBench}
-                addMode={addMode}
-                onMapClick={handleMapClick}
-                flyTo={flyTo}
-              />
-            )}
-
-            {!addMode && (
-              <button
-                onClick={() => {
-                  if (!user) {
-                    showToast('Bitte melde dich an, um eine Bank hinzuzufügen.')
-                    setView('profile')
-                    return
-                  }
-                  setAddMode(true)
-                }}
-                className="absolute bottom-20 right-5 z-[500] flex h-14 w-14 items-center justify-center rounded-full border-none text-[28px] text-white shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #E8A838, #D4922A)' }}
-                title="Neue Bank hinzufügen"
-              >
-                +
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      <BottomNav view={activeNavView} onNavigate={handleNavigate} />
-      <Toast message={toast} />
+    <div style={{ display: "flex", gap: 2 }}>
+      {[1,2,3,4,5].map(s => (
+        <span key={s} onClick={() => interactive && onRate?.(s)}
+          onMouseEnter={() => interactive && setH(s)} onMouseLeave={() => interactive && setH(0)}
+          style={{ fontSize: size, cursor: interactive ? "pointer" : "default",
+            color: s <= (h || rating) ? "#E8A838" : "#D1C7B7" }}>★</span>
+      ))}
     </div>
-  )
-}
+  );
+};
+
+const T = { bg: "#F7F3ED", pri: "#4A7C28", priDk: "#2D5016", acc: "#E8A838", txt: "#2C2416", mut: "#8C7E6A", brd: "#E8E0D4" };
+const btnStyle = { width: 44, height: 44, borderRadius: 12, border: "none", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", display: "flex", alignItems: "center", justifyContent: "center" };
 
 export default function App() {
+  const [benches, setBenches] = useState(BENCHES);
+  const [view, setView] = useState("map");
+  const [sel, setSel] = useState(null);
+  const [addMode, setAddMode] = useState(false);
+  const [newPos, setNewPos] = useState(null);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newPhoto, setNewPhoto] = useState(null);
+  const [comment, setComment] = useState("");
+  const [rating, setRating] = useState(0);
+  const [search, setSearch] = useState("");
+  const [toast, setToast] = useState(null);
+  const [userPos, setUserPos] = useState(null);
+
+  // Map state
+  const [cLng, setCLng] = useState(10.4);
+  const [cLat, setCLat] = useState(51.2);
+  const [dpp, setDpp] = useState(null); // degrees per pixel, null=auto
+  const [mapSize, setMapSize] = useState({ w: 400, h: 600 });
+  const mapRef = useRef(null);
+  const dragRef = useRef(null);
+  const [flewToUser, setFlewToUser] = useState(false);
+
+  // Auto-fit dpp
+  const autoDpp = Math.max(11 / (mapSize.w * 0.85), 9 / (mapSize.h * 0.85));
+  const curDpp = dpp || autoDpp;
+
+  // Measure map container
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+    const m = () => setMapSize({ w: el.clientWidth, h: el.clientHeight });
+    m();
+    const ro = new ResizeObserver(m);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view]);
+
+  // GPS
+  useEffect(() => {
+    if (!navigator.geolocation) { setUserPos({ lat: 50.11, lng: 8.68 }); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => setUserPos({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => setUserPos({ lat: 50.11, lng: 8.68 }),
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+    const id = navigator.geolocation.watchPosition(
+      p => setUserPos({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {},
+      { enableHighAccuracy: true, maximumAge: 10000 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  // Fly to user
+  useEffect(() => {
+    if (userPos && !flewToUser && mapSize.w > 50) {
+      setCLat(userPos.lat); setCLng(userPos.lng);
+      setDpp(autoDpp * 0.3);
+      setFlewToUser(true);
+    }
+  }, [userPos, flewToUser, mapSize, autoDpp]);
+
+  const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
+
+  const geo2px = useCallback((lat, lng) => ({
+    x: mapSize.w / 2 + (lng - cLng) / curDpp,
+    y: mapSize.h / 2 - (lat - cLat) / curDpp,
+  }), [mapSize, cLng, cLat, curDpp]);
+
+  const px2geo = useCallback((px, py) => ({
+    lng: cLng + (px - mapSize.w / 2) * curDpp,
+    lat: cLat - (py - mapSize.h / 2) * curDpp,
+  }), [mapSize, cLng, cLat, curDpp]);
+
+  // Drag handlers
+  const onPtrDown = (e) => {
+    if (e.target.closest("[data-pin]") || e.target.closest("[data-btn]")) return;
+    dragRef.current = { sx: e.clientX, sy: e.clientY, sLng: cLng, sLat: cLat, moved: false };
+    mapRef.current?.setPointerCapture(e.pointerId);
+  };
+  const onPtrMove = (e) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.sx, dy = e.clientY - dragRef.current.sy;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragRef.current.moved = true;
+    setCLng(dragRef.current.sLng - dx * curDpp);
+    setCLat(dragRef.current.sLat + dy * curDpp);
+  };
+  const onPtrUp = (e) => {
+    const wasDrag = dragRef.current?.moved;
+    dragRef.current = null;
+    if (!wasDrag && addMode && mapRef.current) {
+      const r = mapRef.current.getBoundingClientRect();
+      const g = px2geo(e.clientX - r.left, e.clientY - r.top);
+      setNewPos(g); setAddMode(false); setView("add");
+    }
+  };
+  const onWhl = (e) => {
+    e.preventDefault();
+    setDpp(prev => {
+      const c = prev || curDpp;
+      const n = c * (e.deltaY > 0 ? 1.25 : 0.8);
+      return (n < 0.002 || n > 0.08) ? c : n;
+    });
+  };
+
+  const addBench = () => {
+    if (!newTitle.trim() || !newPos) return;
+    setBenches(p => [...p, { id: Date.now(), ...newPos, title: newTitle, description: newDesc, photo: newPhoto, user: "Du", date: new Date().toISOString().split("T")[0], ratings: [5], comments: [] }]);
+    setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewPos(null); setView("map");
+    flash("🪑 Bank hinzugefügt!");
+  };
+
+  const addComment = () => {
+    if (!comment.trim() || !rating || !sel) return;
+    const u = benches.map(b => b.id === sel.id ? { ...b, ratings: [...b.ratings, rating], comments: [...b.comments, { user: "Du", text: comment, date: new Date().toISOString().split("T")[0], rating }] } : b);
+    setBenches(u); setSel(u.find(b => b.id === sel.id));
+    setComment(""); setRating(0); flash("⭐ Bewertung gespeichert!");
+  };
+
+  const onPhoto = (e) => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setNewPhoto(ev.target.result); r.readAsDataURL(f); } };
+
+  const filtered = benches.filter(b => b.title.toLowerCase().includes(search.toLowerCase()) || b.description.toLowerCase().includes(search.toLowerCase()));
+
+  // Germany outline SVG path
+  const dePath = DE.map((c, i) => { const p = geo2px(c[1], c[0]); return `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`; }).join(" ") + "Z";
+
+  const inp = { width: "100%", padding: 12, borderRadius: 12, border: `2px solid ${T.brd}`, fontSize: 14, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", boxSizing: "border-box" };
+  const bk = { background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 20, fontSize: 13, fontFamily: "system-ui", cursor: "pointer", marginBottom: 14 };
+
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  )
+    <div style={{ fontFamily: "system-ui, sans-serif", background: T.bg, color: T.txt, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <style>{`
+        .pulse { animation: p 2s ease-out infinite; }
+        @keyframes p { 0%{transform:scale(.5);opacity:.8} 100%{transform:scale(1.8);opacity:0} }
+        input:focus,textarea:focus{border-color:${T.pri} !important}
+      `}</style>
+
+      {/* HEADER */}
+      <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 22 }}>🪑</span>
+          <div><div style={{ fontSize: 18, fontWeight: 700 }}>BankBank</div>
+            <div style={{ fontSize: 8, opacity: .75, letterSpacing: 1.5, textTransform: "uppercase" }}>Deutschlands schönste Bänke</div></div>
+        </div>
+        <div style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20 }}>{benches.length} Bänke</div>
+      </div>
+
+      {/* === MAP VIEW === */}
+      {view === "map" && (
+        <div ref={mapRef} style={{ flex: 1, position: "relative", overflow: "hidden", touchAction: "none", cursor: addMode ? "crosshair" : "grab", background: "#dce8f1", userSelect: "none" }}
+          onPointerDown={onPtrDown} onPointerMove={onPtrMove} onPointerUp={onPtrUp} onWheel={onWhl}>
+
+          <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+            <path d={dePath} fill="#eae6dd" stroke="#c5bfb3" strokeWidth="2" strokeLinejoin="round" />
+          </svg>
+
+          {CITIES.map(([n, lt, ln]) => {
+            const p = geo2px(lt, ln);
+            if (p.x < -50 || p.x > mapSize.w + 50 || p.y < -50 || p.y > mapSize.h + 50) return null;
+            return (
+              <div key={n} style={{ position: "absolute", left: p.x, top: p.y, transform: "translate(-50%,-50%)", pointerEvents: "none", textAlign: "center" }}>
+                <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#aaa", margin: "0 auto 2px" }} />
+                <div style={{ fontSize: 10, color: "#888", fontWeight: 500, whiteSpace: "nowrap", textShadow: "0 0 3px #fff, 0 0 3px #fff" }}>{n}</div>
+              </div>
+            );
+          })}
+
+          {benches.map(b => {
+            const p = geo2px(b.lat, b.lng);
+            if (p.x < -40 || p.x > mapSize.w + 40 || p.y < -60 || p.y > mapSize.h + 20) return null;
+            const a = avg(b.ratings);
+            return (
+              <div key={b.id} data-pin="1" onClick={e => { e.stopPropagation(); setSel(b); setView("detail"); }}
+                style={{ position: "absolute", left: p.x, top: p.y, transform: "translate(-50%,-100%)", cursor: "pointer", zIndex: 5 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.pri, border: "3px solid #fff", boxShadow: "0 2px 8px rgba(0,0,0,.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🪑</div>
+                  <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${T.pri}`, marginTop: -2 }} />
+                  {a !== "–" && <div style={{ position: "absolute", top: -4, right: -8, background: T.acc, color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 9, fontWeight: 700, border: "1.5px solid #fff" }}>{a}</div>}
+                </div>
+              </div>
+            );
+          })}
+
+          {userPos && (() => {
+            const p = geo2px(userPos.lat, userPos.lng);
+            return (p.x > -30 && p.x < mapSize.w + 30 && p.y > -30 && p.y < mapSize.h + 30) ? (
+              <div style={{ position: "absolute", left: p.x, top: p.y, transform: "translate(-50%,-50%)", zIndex: 6, pointerEvents: "none" }}>
+                <div style={{ width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                  <div className="pulse" style={{ position: "absolute", width: 40, height: 40, borderRadius: "50%", background: "rgba(66,133,244,.15)" }} />
+                  <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#4285F4", border: "3px solid #fff", boxShadow: "0 1px 6px rgba(0,0,0,.3)", zIndex: 1 }} />
+                </div>
+              </div>
+            ) : null;
+          })()}
+
+          {/* Buttons rechts unten */}
+          <div data-btn="1" style={{ position: "absolute", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
+            <button onClick={() => { setCLng(10.4); setCLat(51.2); setDpp(null); flash("🇩🇪 Ganz Deutschland"); }} style={{ ...btnStyle, background: "#fff", color: "#666" }}>🇩🇪</button>
+            <button onClick={() => { if (userPos) { setCLat(userPos.lat); setCLng(userPos.lng); setDpp(autoDpp * 0.3); flash("📍 Dein Standort"); } }} style={{ ...btnStyle, background: "#fff", color: userPos ? "#4285F4" : "#aaa" }}>◎</button>
+            <button onClick={() => setAddMode(true)} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
+          </div>
+
+          {addMode && (
+            <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", background: T.acc, color: "#fff", padding: "10px 20px", borderRadius: 30, fontSize: 13, fontWeight: 600, zIndex: 20, boxShadow: "0 4px 16px rgba(232,168,56,.4)", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+              📍 Tippe auf die Karte
+              <button onClick={() => setAddMode(false)} style={{ background: "rgba(0,0,0,.2)", border: "none", color: "#fff", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", fontSize: 13 }}>×</button>
+            </div>
+          )}
+
+          <div style={{ position: "absolute", bottom: 4, left: 4, fontSize: 8, color: "#999", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3 }}>© BankBank</div>
+        </div>
+      )}
+
+      {/* === DETAIL VIEW === */}
+      {view === "detail" && sel && (
+        <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
+          <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "20px 16px 28px" }}>
+            <button onClick={() => { setView("map"); setSel(null); }} style={bk}>← Zurück</button>
+            <h2 style={{ margin: 0, fontSize: 20 }}>{sel.title}</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, opacity: .9 }}>
+              <Stars rating={Math.round(parseFloat(avg(sel.ratings)))} size={18} />
+              <span style={{ fontSize: 13 }}>{avg(sel.ratings)} · {sel.ratings.length} Bewertungen</span>
+            </div>
+            <p style={{ margin: "6px 0 0", fontSize: 11, opacity: .7 }}>📍 von {sel.user} · {sel.date}</p>
+          </div>
+          {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: 180, objectFit: "cover", borderRadius: 16 }} /></div>}
+          <div style={{ padding: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
+              <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
+              <p style={{ margin: 0, fontSize: 13, color: T.mut, lineHeight: 1.5 }}>{sel.description}</p>
+            </div>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
+              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Bewertung abgeben</h3>
+              <Stars rating={rating} size={28} interactive onRate={setRating} />
+              <textarea placeholder="Dein Kommentar..." value={comment} onChange={e => setComment(e.target.value)} style={{ ...inp, minHeight: 60, resize: "vertical", marginTop: 10 }} />
+              <button onClick={addComment} disabled={!comment.trim() || !rating} style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", width: "100%", opacity: (!comment.trim() || !rating) ? .5 : 1 }}>Absenden</button>
+            </div>
+            {sel.comments.length > 0 && <div>
+              <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Kommentare ({sel.comments.length})</h3>
+              {sel.comments.map((c, i) => (
+                <div key={i} style={{ background: "#fff", borderRadius: 12, padding: 12, border: `1px solid ${T.brd}`, marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>{c.user}</span><Stars rating={c.rating} size={11} />
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, color: T.mut }}>{c.text}</p>
+                  <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
+                </div>
+              ))}
+            </div>}
+          </div>
+        </div>
+      )}
+
+      {/* === ADD FORM === */}
+      {view === "add" && (
+        <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
+          <div style={{ background: `linear-gradient(135deg,#B8860B,${T.acc})`, color: "#fff", padding: "20px 16px 28px" }}>
+            <button onClick={() => { setView("map"); setNewPos(null); }} style={bk}>← Abbrechen</button>
+            <h2 style={{ margin: 0, fontSize: 20 }}>🪑 Neue Bank</h2>
+            {newPos && <p style={{ margin: "6px 0 0", fontSize: 12, opacity: .8 }}>📍 {newPos.lat.toFixed(4)}, {newPos.lng.toFixed(4)}</p>}
+          </div>
+          <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Name *</label>
+              <input type="text" placeholder="z.B. Sonnenbank am See" value={newTitle} onChange={e => setNewTitle(e.target.value)} style={inp} /></div>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Beschreibung</label>
+              <textarea placeholder="Was macht sie besonders?" value={newDesc} onChange={e => setNewDesc(e.target.value)} style={{ ...inp, minHeight: 60, resize: "vertical" }} /></div>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto</label>
+              {newPhoto ? (
+                <div style={{ position: "relative" }}><img src={newPhoto} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
+                  <button onClick={() => setNewPhoto(null)} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
+              ) : (
+                <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 80, border: `2px dashed ${T.brd}`, borderRadius: 12, cursor: "pointer", color: T.mut, fontSize: 13, gap: 4 }}>
+                  <span style={{ fontSize: 24 }}>📷</span>Foto aufnehmen
+                  <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} /></label>
+              )}</div>
+            <button onClick={addBench} disabled={!newTitle.trim() || !newPos} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: (!newTitle.trim() || !newPos) ? .5 : 1 }}>Eintragen ✓</button>
+          </div>
+        </div>
+      )}
+
+      {/* === LIST VIEW === */}
+      {view === "list" && (
+        <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
+          <div style={{ padding: "12px 16px 6px" }}><input type="text" placeholder="🔍 Bank suchen..." value={search} onChange={e => setSearch(e.target.value)} style={inp} /></div>
+          {filtered.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke gefunden 🪑</p>}
+          {[...filtered].sort((a, b) => parseFloat(avg(b.ratings)) - parseFloat(avg(a.ratings))).map(b => (
+            <div key={b.id} onClick={() => { setSel(b); setView("detail"); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer" }}>
+              <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}><Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={12} /><span style={{ fontSize: 11, color: T.mut }}>{avg(b.ratings)} · {b.comments.length} Kommentare</span></div>
+              <p style={{ margin: 0, fontSize: 12, color: T.mut }}>{b.description}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* NAV */}
+      <div style={{ display: "flex", background: "#fff", borderTop: `1px solid ${T.brd}`, padding: "4px 0 8px", flexShrink: 0 }}>
+        {[["map","🗺️","Karte"],["list","📋","Liste"],["add","➕","Neu"],["profile","👤","Profil"]].map(([id, ic, lb]) => (
+          <button key={id} onClick={() => { if (id === "add") { setAddMode(true); setView("map"); } else if (id === "profile") flash("Profil kommt bald! 👤"); else { setView(id); setAddMode(false); } }}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "4px 0", background: "none", border: "none", color: view === id ? T.pri : T.mut, fontSize: 9, fontWeight: view === id ? 700 : 500, cursor: "pointer" }}>
+            {id === "add" ? <span style={{ fontSize: 15, background: T.pri, color: "#fff", width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{ic}</span> : <span style={{ fontSize: 18 }}>{ic}</span>}
+            {lb}
+          </button>
+        ))}
+      </div>
+
+      {toast && <div style={{ position: "fixed", bottom: 70, left: "50%", transform: "translateX(-50%)", background: T.priDk, color: "#fff", padding: "10px 20px", borderRadius: 30, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,.2)", whiteSpace: "nowrap" }}>{toast}</div>}
+    </div>
+  );
 }
