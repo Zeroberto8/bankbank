@@ -51,6 +51,10 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [userPos, setUserPos] = useState(null);
   // Admin state
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [adminUser, setAdminUser] = useState("");
+  const [adminPass, setAdminPass] = useState("");
+  const [adminError, setAdminError] = useState("");
   const [editBench, setEditBench] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -494,11 +498,46 @@ export default function App() {
       )}
 
       {/* === ADMIN VIEW === */}
-      {view === "admin" && (
+      {view === "admin" && !adminAuth && (
+        <div style={{ flex: 1, overflow: "auto", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 340, padding: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: `1px solid ${T.brd}`, boxShadow: "0 4px 20px rgba(0,0,0,.08)" }}>
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <span style={{ fontSize: 36 }}>🔒</span>
+                <h2 style={{ margin: "8px 0 4px", fontSize: 18, color: T.txt }}>Admin-Login</h2>
+                <p style={{ margin: 0, fontSize: 12, color: T.mut }}>Bitte melde dich an</p>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Benutzer</label>
+                <input type="email" placeholder="E-Mail-Adresse" value={adminUser} onChange={e => { setAdminUser(e.target.value); setAdminError(""); }} style={inp} />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Passwort</label>
+                <input type="password" placeholder="Passwort" value={adminPass}
+                  onChange={e => { setAdminPass(e.target.value); setAdminError(""); }}
+                  onKeyDown={e => { if (e.key === "Enter") { if (adminUser === import.meta.env.VITE_ADMIN_USER && adminPass === import.meta.env.VITE_ADMIN_PASS) { setAdminAuth(true); setAdminError(""); } else { setAdminError("Falsche Zugangsdaten"); } } }}
+                  style={inp} />
+              </div>
+              {adminError && <p style={{ margin: "0 0 10px", fontSize: 12, color: "#dc3545", textAlign: "center" }}>{adminError}</p>}
+              <button onClick={() => {
+                if (adminUser === import.meta.env.VITE_ADMIN_USER && adminPass === import.meta.env.VITE_ADMIN_PASS) {
+                  setAdminAuth(true); setAdminError("");
+                } else { setAdminError("Falsche Zugangsdaten"); }
+              }} style={{ width: "100%", padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Anmelden</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === "admin" && adminAuth && (
         <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
-          <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "16px 16px 12px" }}>
-            <h2 style={{ margin: 0, fontSize: 18 }}>⚙️ Admin-Panel</h2>
-            <p style={{ margin: "4px 0 0", fontSize: 11, opacity: .75 }}>{benches.length} Bänke verwalten</p>
+          <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18 }}>⚙️ Admin-Panel</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 11, opacity: .75 }}>{benches.length} Bänke verwalten</p>
+            </div>
+            <button onClick={() => { setAdminAuth(false); setAdminUser(""); setAdminPass(""); }}
+              style={{ background: "rgba(255,255,255,.2)", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer" }}>Abmelden</button>
           </div>
 
           {/* Edit-Modal */}
