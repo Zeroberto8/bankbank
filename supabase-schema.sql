@@ -50,6 +50,10 @@ create policy "Anyone can update benches"
   on public.benches for update
   using (true);
 
+create policy "Anyone can delete benches"
+  on public.benches for delete
+  using (true);
+
 -- Kommentare: Jeder kann lesen und erstellen (ohne Auth)
 create policy "Comments are viewable by everyone"
   on public.comments for select

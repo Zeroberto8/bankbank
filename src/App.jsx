@@ -17,6 +17,15 @@ const Stars = ({ rating, size = 16, interactive, onRate }) => {
   );
 };
 
+// Haversine-Distanz in km
+const dist = (lat1, lng1, lat2, lng2) => {
+  const R = 6371, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+const fmtDist = (km) => km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+
 const T = { bg: "#F7F3ED", pri: "#4A7C28", priDk: "#2D5016", acc: "#E8A838", txt: "#2C2416", mut: "#8C7E6A", brd: "#E8E0D4" };
 const btnStyle = { width: 44, height: 44, borderRadius: 12, border: "none", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", display: "flex", alignItems: "center", justifyContent: "center" };
 
@@ -41,6 +50,10 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const [userPos, setUserPos] = useState(null);
+  // Admin state
+  const [editBench, setEditBench] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
 
   // Map state
   const [cLng, setCLng] = useState(10.4);
@@ -294,6 +307,27 @@ export default function App() {
     fetchBenches();
   };
 
+  // Admin: Bank löschen
+  const deleteBench = async (id) => {
+    const { error } = await supabase.from("benches").delete().eq("id", id);
+    if (error) { flash("Fehler beim Löschen!"); return; }
+    flash("🗑️ Bank gelöscht!");
+    fetchBenches();
+  };
+
+  // Admin: Bank bearbeiten
+  const updateBench = async () => {
+    if (!editBench || !editTitle.trim()) return;
+    const { error } = await supabase.from("benches").update({
+      title: editTitle.trim(),
+      description: editDesc.trim() || null,
+    }).eq("id", editBench.id);
+    if (error) { flash("Fehler beim Speichern!"); return; }
+    setEditBench(null); setEditTitle(""); setEditDesc("");
+    flash("✅ Bank aktualisiert!");
+    fetchBenches();
+  };
+
   const onPhoto = (e) => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setNewPhoto(ev.target.result); r.readAsDataURL(f); } };
 
   const filtered = benches.filter(b => b.title.toLowerCase().includes(search.toLowerCase()) || b.description.toLowerCase().includes(search.toLowerCase()));
@@ -440,11 +474,74 @@ export default function App() {
         <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
           <div style={{ padding: "12px 16px 6px" }}><input type="text" placeholder="🔍 Bank suchen..." value={search} onChange={e => setSearch(e.target.value)} style={inp} /></div>
           {filtered.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke gefunden 🪑</p>}
-          {[...filtered].sort((a, b) => parseFloat(avg(b.ratings)) - parseFloat(avg(a.ratings))).map(b => (
-            <div key={b.id} onClick={() => { setSel(b); setView("detail"); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer" }}>
-              <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}><Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={12} /><span style={{ fontSize: 11, color: T.mut }}>{avg(b.ratings)} · {b.comments.length} Kommentare</span></div>
-              <p style={{ margin: 0, fontSize: 12, color: T.mut }}>{b.description}</p>
+          {[...filtered].sort((a, b) => {
+            if (!userPos) return 0;
+            return dist(userPos.lat, userPos.lng, a.lat, a.lng) - dist(userPos.lat, userPos.lng, b.lat, b.lng);
+          }).map(b => {
+            const d = userPos ? dist(userPos.lat, userPos.lng, b.lat, b.lng) : null;
+            return (
+              <div key={b.id} onClick={() => { setSel(b); setView("detail"); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
+                  {d !== null && <span style={{ fontSize: 11, color: T.pri, fontWeight: 600, whiteSpace: "nowrap", marginLeft: 8 }}>📍 {fmtDist(d)}</span>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}><Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={12} /><span style={{ fontSize: 11, color: T.mut }}>{avg(b.ratings)} · {b.comments.length} Kommentare</span></div>
+                <p style={{ margin: 0, fontSize: 12, color: T.mut }}>{b.description}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* === ADMIN VIEW === */}
+      {view === "admin" && (
+        <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
+          <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "16px 16px 12px" }}>
+            <h2 style={{ margin: 0, fontSize: 18 }}>⚙️ Admin-Panel</h2>
+            <p style={{ margin: "4px 0 0", fontSize: 11, opacity: .75 }}>{benches.length} Bänke verwalten</p>
+          </div>
+
+          {/* Edit-Modal */}
+          {editBench && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+              <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 400, maxHeight: "80vh", overflow: "auto" }}>
+                <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>✏️ Bank bearbeiten</h3>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Name *</label>
+                  <input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} style={inp} />
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Beschreibung</label>
+                  <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} style={{ ...inp, minHeight: 60, resize: "vertical" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => { setEditBench(null); setEditTitle(""); setEditDesc(""); }} style={{ flex: 1, padding: 10, borderRadius: 12, border: `1px solid ${T.brd}`, background: "#fff", color: T.txt, fontSize: 13, cursor: "pointer" }}>Abbrechen</button>
+                  <button onClick={updateBench} disabled={!editTitle.trim()} style={{ flex: 1, padding: 10, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: !editTitle.trim() ? .5 : 1 }}>Speichern</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {benches.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke vorhanden</p>}
+          {benches.map(b => (
+            <div key={b.id} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                    <Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={11} />
+                    <span style={{ fontSize: 10, color: T.mut }}>{avg(b.ratings)}</span>
+                  </div>
+                  <p style={{ margin: "2px 0 0", fontSize: 11, color: T.mut }}>{b.user} · {b.date}</p>
+                </div>
+              </div>
+              {b.description && <p style={{ margin: "6px 0 0", fontSize: 12, color: T.mut }}>{b.description}</p>}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button onClick={() => { setEditBench(b); setEditTitle(b.title); setEditDesc(b.description || ""); }}
+                  style={{ flex: 1, padding: 8, borderRadius: 10, border: `1px solid ${T.brd}`, background: "#fff", color: T.txt, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>✏️ Bearbeiten</button>
+                <button onClick={() => { if (confirm(`"${b.title}" wirklich löschen?`)) deleteBench(b.id); }}
+                  style={{ flex: 1, padding: 8, borderRadius: 10, border: "none", background: "#dc3545", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>🗑️ Löschen</button>
+              </div>
             </div>
           ))}
         </div>
@@ -452,8 +549,8 @@ export default function App() {
 
       {/* NAV */}
       <div style={{ display: "flex", background: "#fff", borderTop: `1px solid ${T.brd}`, padding: "6px 0", paddingBottom: "max(8px, env(safe-area-inset-bottom))", flexShrink: 0 }}>
-        {[["map","🗺️","Karte"],["list","📋","Liste"],["profile","👤","Profil"]].map(([id, ic, lb]) => (
-          <button key={id} onClick={() => { if (id === "profile") flash("Profil kommt bald! 👤"); else { setView(id); setAddMode(false); } }}
+        {[["map","🗺️","Karte"],["list","📋","Liste"],["admin","⚙️","Admin"]].map(([id, ic, lb]) => (
+          <button key={id} onClick={() => { setView(id); }}
             style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0", background: "none", border: "none", color: view === id ? T.pri : T.mut, fontSize: 10, fontWeight: view === id ? 700 : 500, cursor: "pointer" }}>
             <span style={{ fontSize: 22 }}>{ic}</span>
             {lb}
