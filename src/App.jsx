@@ -37,8 +37,7 @@ export default function App() {
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newPhoto, setNewPhoto] = useState(null);
-  const [comment, setComment] = useState("");
-  const [rating, setRating] = useState(0);
+  const [newRating, setNewRating] = useState(0);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const [userPos, setUserPos] = useState(null);
@@ -261,7 +260,7 @@ export default function App() {
   }, [zoom, cLng, cLat, mapSize, worldSize]);
 
   const addBench = async () => {
-    if (!newTitle.trim() || !newPos) return;
+    if (!newTitle.trim() || !newPos || !newRating) return;
 
     const { data, error } = await supabase
       .from("benches")
@@ -282,37 +281,17 @@ export default function App() {
       return;
     }
 
-    // Auch eine initiale 5-Sterne-Bewertung vom Ersteller einfügen
+    // Bewertung vom Ersteller einfügen
     await supabase.from("comments").insert({
       bench_id: data.id,
       user_name: "Du",
-      rating: 5,
+      rating: newRating,
       text: null,
     });
 
-    setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewPos(null); setView("map");
+    setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewRating(0); setNewPos(null); setView("map");
     flash("🪑 Bank hinzugefügt!");
     fetchBenches();
-  };
-
-  const addComment = async () => {
-    if (!comment.trim() || !rating || !sel) return;
-
-    const { error } = await supabase.from("comments").insert({
-      bench_id: sel.id,
-      user_name: "Du",
-      text: comment.trim(),
-      rating,
-    });
-
-    if (error) {
-      console.error("Fehler beim Speichern:", error);
-      flash("Fehler beim Speichern!");
-      return;
-    }
-
-    setComment(""); setRating(0); flash("⭐ Bewertung gespeichert!");
-    await fetchBenches();
   };
 
   const onPhoto = (e) => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setNewPhoto(ev.target.result); r.readAsDataURL(f); } };
@@ -411,12 +390,6 @@ export default function App() {
               <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
               <p style={{ margin: 0, fontSize: 13, color: T.mut, lineHeight: 1.5 }}>{sel.description}</p>
             </div>
-            <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
-              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Bewertung abgeben</h3>
-              <Stars rating={rating} size={28} interactive onRate={setRating} />
-              <textarea placeholder="Dein Kommentar..." value={comment} onChange={e => setComment(e.target.value)} style={{ ...inp, minHeight: 60, resize: "vertical", marginTop: 10 }} />
-              <button onClick={addComment} disabled={!comment.trim() || !rating} style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", width: "100%", opacity: (!comment.trim() || !rating) ? .5 : 1 }}>Absenden</button>
-            </div>
             {sel.comments.length > 0 && <div>
               <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Kommentare ({sel.comments.length})</h3>
               {sel.comments.map((c, i) => (
@@ -455,7 +428,9 @@ export default function App() {
                   <span style={{ fontSize: 24 }}>📷</span>Foto aufnehmen
                   <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} /></label>
               )}</div>
-            <button onClick={addBench} disabled={!newTitle.trim() || !newPos} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: (!newTitle.trim() || !newPos) ? .5 : 1 }}>Eintragen ✓</button>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Bewertung *</label>
+              <Stars rating={newRating} size={28} interactive onRate={setNewRating} /></div>
+            <button onClick={addBench} disabled={!newTitle.trim() || !newPos || !newRating} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: (!newTitle.trim() || !newPos || !newRating) ? .5 : 1 }}>Eintragen ✓</button>
           </div>
         </div>
       )}
