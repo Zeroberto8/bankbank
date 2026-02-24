@@ -1,15 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-
-const BENCHES = [
-  { id: 1, lat: 52.52, lng: 13.405, title: "Tiergarten Lieblingsbank", description: "Wunderschöne Bank am See mit Blick auf die Fontäne. Perfekt für die Mittagspause.", photo: null, user: "Anna M.", date: "2025-01-15", ratings: [5, 4, 5, 4], comments: [{ user: "Tom K.", text: "Mein absoluter Lieblingsplatz! 🌿", date: "2025-01-20", rating: 5 }, { user: "Lisa R.", text: "Sehr ruhig und schattig im Sommer.", date: "2025-02-01", rating: 4 }] },
-  { id: 2, lat: 48.137, lng: 11.575, title: "Englischer Garten Panorama", description: "Holzbank auf dem kleinen Hügel mit 360° Blick über den Park.", photo: null, user: "Max B.", date: "2025-02-03", ratings: [5, 5, 5], comments: [{ user: "Sarah W.", text: "Sonnenuntergang hier ist magisch! 🌅", date: "2025-02-10", rating: 5 }] },
-  { id: 3, lat: 50.938, lng: 6.96, title: "Rheinufer Köln Deutz", description: "Moderne Bank direkt am Rhein mit Blick auf den Dom.", photo: null, user: "Julia F.", date: "2025-01-28", ratings: [4, 5, 4, 5, 4], comments: [{ user: "Chris P.", text: "Perfekter Spot für ein Feierabendbier.", date: "2025-02-05", rating: 4 }] },
-  { id: 4, lat: 53.551, lng: 9.994, title: "Alster-Uferbank", description: "Klassische weiße Holzbank an der Außenalster. Segelboote beobachten inklusive.", photo: null, user: "Henrik S.", date: "2025-01-10", ratings: [5, 4, 5], comments: [] },
-  { id: 5, lat: 51.34, lng: 12.373, title: "Clara-Zetkin-Park Lesebank", description: "Versteckte Bank zwischen alten Eichen.", photo: null, user: "Mia T.", date: "2025-02-08", ratings: [5, 5, 4, 5], comments: [{ user: "Paul D.", text: "Geheimtipp!", date: "2025-02-14", rating: 5 }] },
-  { id: 6, lat: 48.775, lng: 9.183, title: "Schlossplatz Stuttgart", description: "Steinbank mit Blick auf das Neue Schloss.", photo: null, user: "Lena K.", date: "2025-02-10", ratings: [4, 4, 5], comments: [] },
-  { id: 7, lat: 51.05, lng: 13.738, title: "Elbwiesen Dresden", description: "Holzbank mit Blick auf die Altstadt-Silhouette.", photo: null, user: "Felix W.", date: "2025-01-22", ratings: [5, 5, 5, 4], comments: [] },
-  { id: 8, lat: 49.453, lng: 11.077, title: "Burggarten Nürnberg", description: "Alte Steinbank mit Panoramablick.", photo: null, user: "Jan H.", date: "2025-02-15", ratings: [4, 5, 4], comments: [] },
-];
+import { supabase } from "./lib/supabase";
 
 const avg = (r) => r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) : "–";
 
@@ -38,7 +28,8 @@ const lat2world = (lat) => {
 const world2lat = (y) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
 
 export default function App() {
-  const [benches, setBenches] = useState(BENCHES);
+  const [benches, setBenches] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState("map");
   const [sel, setSel] = useState(null);
   const [addMode, setAddMode] = useState(false);
@@ -102,6 +93,52 @@ export default function App() {
   }, [userPos, flewToUser, mapSize]);
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
+
+  // Supabase: Alle Bänke laden
+  const fetchBenches = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("benches")
+      .select("*, comments(*)")
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setBenches(data.map(b => ({
+        id: b.id,
+        lat: b.lat,
+        lng: b.lng,
+        title: b.title,
+        description: b.description || "",
+        photo: b.photo_url,
+        user: b.user_name,
+        date: new Date(b.created_at).toISOString().split("T")[0],
+        ratings: (b.comments || []).map(c => c.rating),
+        comments: (b.comments || [])
+          .filter(c => c.text)
+          .map(c => ({
+            id: c.id,
+            user: c.user_name,
+            text: c.text,
+            rating: c.rating,
+            date: new Date(c.created_at).toISOString().split("T")[0],
+          })),
+      })));
+    } else if (error) {
+      console.error("Fehler beim Laden:", error);
+    }
+    setLoading(false);
+  }, []);
+
+  // Beim Start laden
+  useEffect(() => { fetchBenches(); }, [fetchBenches]);
+
+  // Detail-Ansicht aktualisieren wenn Bänke neu geladen werden
+  useEffect(() => {
+    if (sel) {
+      const updated = benches.find(b => b.id === sel.id);
+      if (updated) setSel(updated);
+    }
+  }, [benches]);
 
   // Mercator geo <-> pixel conversion
   const geo2px = useCallback((lat, lng) => {
@@ -229,18 +266,59 @@ export default function App() {
     return result;
   }, [zoom, cLng, cLat, mapSize, worldSize]);
 
-  const addBench = () => {
+  const addBench = async () => {
     if (!newTitle.trim() || !newPos) return;
-    setBenches(p => [...p, { id: Date.now(), ...newPos, title: newTitle, description: newDesc, photo: newPhoto, user: "Du", date: new Date().toISOString().split("T")[0], ratings: [5], comments: [] }]);
+
+    const { data, error } = await supabase
+      .from("benches")
+      .insert({
+        title: newTitle.trim(),
+        description: newDesc.trim() || null,
+        lat: newPos.lat,
+        lng: newPos.lng,
+        photo_url: newPhoto,
+        user_name: "Du",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Fehler beim Speichern:", error);
+      flash("Fehler beim Speichern!");
+      return;
+    }
+
+    // Auch eine initiale 5-Sterne-Bewertung vom Ersteller einfügen
+    await supabase.from("comments").insert({
+      bench_id: data.id,
+      user_name: "Du",
+      rating: 5,
+      text: null,
+    });
+
     setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewPos(null); setView("map");
     flash("🪑 Bank hinzugefügt!");
+    fetchBenches();
   };
 
-  const addComment = () => {
+  const addComment = async () => {
     if (!comment.trim() || !rating || !sel) return;
-    const u = benches.map(b => b.id === sel.id ? { ...b, ratings: [...b.ratings, rating], comments: [...b.comments, { user: "Du", text: comment, date: new Date().toISOString().split("T")[0], rating }] } : b);
-    setBenches(u); setSel(u.find(b => b.id === sel.id));
+
+    const { error } = await supabase.from("comments").insert({
+      bench_id: sel.id,
+      user_name: "Du",
+      text: comment.trim(),
+      rating,
+    });
+
+    if (error) {
+      console.error("Fehler beim Speichern:", error);
+      flash("Fehler beim Speichern!");
+      return;
+    }
+
     setComment(""); setRating(0); flash("⭐ Bewertung gespeichert!");
+    await fetchBenches();
   };
 
   const onPhoto = (e) => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setNewPhoto(ev.target.result); r.readAsDataURL(f); } };
@@ -266,7 +344,7 @@ export default function App() {
           <div><div style={{ fontSize: 18, fontWeight: 700 }}>BankBank</div>
             <div style={{ fontSize: 8, opacity: .75, letterSpacing: 1.5, textTransform: "uppercase" }}>Deutschlands schönste Bänke</div></div>
         </div>
-        <div style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20 }}>{benches.length} Bänke</div>
+        <div style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20 }}>{loading ? "..." : benches.length} Bänke</div>
       </div>
 
       {/* === MAP VIEW === */}
