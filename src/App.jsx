@@ -174,14 +174,8 @@ export default function App() {
     setCLng((sxW - dx) / ws * 360 - 180);
     setCLat(world2lat((syW - dy) / ws));
   };
-  const onPtrUp = (e) => {
-    const wasDrag = dragRef.current?.moved;
+  const onPtrUp = () => {
     dragRef.current = null;
-    if (!wasDrag && addMode && mapRef.current) {
-      const r = mapRef.current.getBoundingClientRect();
-      const g = px2geo(e.clientX - r.left, e.clientY - r.top);
-      setNewPos(g); setAddMode(false); setView("add");
-    }
   };
 
   // Wheel zoom
@@ -349,7 +343,7 @@ export default function App() {
 
       {/* === MAP VIEW === */}
       {view === "map" && (
-        <div ref={mapRef} style={{ flex: 1, position: "relative", overflow: "hidden", touchAction: "none", cursor: addMode ? "crosshair" : "grab", background: "#dce8f1", userSelect: "none" }}
+        <div ref={mapRef} style={{ flex: 1, position: "relative", overflow: "hidden", touchAction: "none", cursor: "grab", background: "#dce8f1", userSelect: "none" }}
           onPointerDown={onPtrDown} onPointerMove={onPtrMove} onPointerUp={onPtrUp} onWheel={onWhl}>
 
           {/* OSM Tiles */}
@@ -391,17 +385,9 @@ export default function App() {
 
           {/* Buttons rechts unten */}
           <div data-btn="1" style={{ position: "absolute", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
-            <button onClick={() => { setCLng(10.4); setCLat(51.2); setZoom(6); flash("🇩🇪 Ganz Deutschland"); }} style={{ ...btnStyle, background: "#fff", color: "#666" }}>🇩🇪</button>
             <button onClick={() => { if (userPos) { setCLat(userPos.lat); setCLng(userPos.lng); setZoom(13); flash("📍 Dein Standort"); } }} style={{ ...btnStyle, background: "#fff", color: userPos ? "#4285F4" : "#aaa" }}>◎</button>
-            <button onClick={() => setAddMode(true)} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
+            <button onClick={() => { if (userPos) { setNewPos({ lat: userPos.lat, lng: userPos.lng }); setView("add"); } else { flash("📍 Standort wird ermittelt..."); } }} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
           </div>
-
-          {addMode && (
-            <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", background: T.acc, color: "#fff", padding: "10px 20px", borderRadius: 30, fontSize: 13, fontWeight: 600, zIndex: 20, boxShadow: "0 4px 16px rgba(232,168,56,.4)", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
-              📍 Tippe auf die Karte
-              <button onClick={() => setAddMode(false)} style={{ background: "rgba(0,0,0,.2)", border: "none", color: "#fff", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", fontSize: 13 }}>×</button>
-            </div>
-          )}
 
           <div style={{ position: "absolute", bottom: 4, left: 4, fontSize: 8, color: "#666", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3, zIndex: 10 }}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenStreetMap</a> © <a href="https://carto.com/" target="_blank" rel="noreferrer" style={{ color: "#666" }}>CARTO</a></div>
         </div>
