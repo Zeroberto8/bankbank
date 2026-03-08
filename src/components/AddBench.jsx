@@ -6,6 +6,7 @@ export default function AddBench({ position, onSubmit, onCancel }) {
   const [photoFile, setPhotoFile] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const fileRef = useRef()
 
   const handlePhoto = (e) => {
@@ -19,13 +20,16 @@ export default function AddBench({ position, onSubmit, onCancel }) {
   }
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return
     if (!title.trim() || !position) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       await onSubmit({ title, description, lat: position.lat, lng: position.lng, photoFile })
     } catch {
       // error handled by parent
     }
+    submittingRef.current = false
     setSubmitting(false)
   }
 
@@ -110,9 +114,10 @@ export default function AddBench({ position, onSubmit, onCancel }) {
         <button
           onClick={handleSubmit}
           disabled={!title.trim() || !position || submitting}
-          className="mt-2 w-full rounded-xl border-none bg-primary px-6 py-3 font-sans text-[15px] font-semibold text-white transition-opacity disabled:opacity-50"
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border-none bg-primary px-6 py-3 font-sans text-[15px] font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting ? 'Wird eingetragen...' : 'Bank eintragen \u2713'}
+          {submitting && <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+          {submitting ? 'Wird gespeichert...' : 'Bank eintragen \u2713'}
         </button>
       </div>
     </div>

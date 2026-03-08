@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Stars, { avgRating } from './Stars'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -7,13 +7,16 @@ export default function BenchDetail({ bench, onBack, onAddReview }) {
   const [comment, setComment] = useState('')
   const [rating, setRating] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
 
   if (!bench) return null
 
   const avg = avgRating(bench.ratings)
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return
     if (!comment.trim() || !rating || !user) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       await onAddReview({ benchId: bench.id, userId: user.id, rating, comment })
@@ -22,6 +25,7 @@ export default function BenchDetail({ bench, onBack, onAddReview }) {
     } catch {
       // error handled by parent
     }
+    submittingRef.current = false
     setSubmitting(false)
   }
 
@@ -82,8 +86,9 @@ export default function BenchDetail({ bench, onBack, onAddReview }) {
               <button
                 onClick={handleSubmit}
                 disabled={!comment.trim() || !rating || submitting}
-                className="mt-3 w-full rounded-xl border-none bg-primary px-6 py-3 font-sans text-[15px] font-semibold text-white transition-opacity disabled:opacity-50"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-none bg-primary px-6 py-3 font-sans text-[15px] font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
               >
+                {submitting && <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
                 {submitting ? 'Wird gespeichert...' : 'Bewertung absenden'}
               </button>
             </>
