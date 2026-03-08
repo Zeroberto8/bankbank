@@ -59,6 +59,18 @@ export default function App() {
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
 
+  // Hash-basierter Admin-Zugang: #admin in der URL öffnet das Admin-Panel
+  useEffect(() => {
+    const checkHash = () => {
+      if (window.location.hash === "#admin") {
+        setView("admin");
+      }
+    };
+    checkHash(); // Beim Laden prüfen
+    window.addEventListener("hashchange", checkHash);
+    return () => window.removeEventListener("hashchange", checkHash);
+  }, []);
+
   // Map state
   const [cLng, setCLng] = useState(10.4);
   const [cLat, setCLat] = useState(51.2);
@@ -507,6 +519,7 @@ export default function App() {
                 <h2 style={{ margin: "8px 0 4px", fontSize: 18, color: T.txt }}>Admin-Login</h2>
                 <p style={{ margin: 0, fontSize: 12, color: T.mut }}>Bitte melde dich an</p>
               </div>
+              <button onClick={() => { setView("map"); window.history.replaceState(null, "", window.location.pathname); }} style={{ ...bk, background: "rgba(0,0,0,.06)", color: T.mut, marginBottom: 16, width: "100%", textAlign: "center" }}>← Zurück zur Karte</button>
               <div style={{ marginBottom: 10 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Benutzer</label>
                 <input type="email" placeholder="E-Mail-Adresse" value={adminUser} onChange={e => { setAdminUser(e.target.value); setAdminError(""); }} style={inp} />
@@ -536,8 +549,10 @@ export default function App() {
               <h2 style={{ margin: 0, fontSize: 18 }}>⚙️ Admin-Panel</h2>
               <p style={{ margin: "4px 0 0", fontSize: 11, opacity: .75 }}>{benches.length} Bänke verwalten</p>
             </div>
-            <button onClick={() => { setAdminAuth(false); setAdminUser(""); setAdminPass(""); }}
-              style={{ background: "rgba(255,255,255,.2)", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer" }}>Abmelden</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { setAdminAuth(false); setAdminUser(""); setAdminPass(""); setView("map"); window.history.replaceState(null, "", window.location.pathname); }}
+                style={{ background: "rgba(255,255,255,.2)", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer" }}>Abmelden</button>
+            </div>
           </div>
 
           {/* Edit-Modal */}
@@ -586,16 +601,16 @@ export default function App() {
         </div>
       )}
 
-      {/* NAV */}
-      <div style={{ display: "flex", background: "#fff", borderTop: `1px solid ${T.brd}`, padding: "6px 0", paddingBottom: "max(8px, env(safe-area-inset-bottom))", flexShrink: 0 }}>
-        {[["map","🗺️","Karte"],["list","📋","Liste"],["admin","⚙️","Admin"]].map(([id, ic, lb]) => (
+      {/* NAV (nur anzeigen wenn NICHT im Admin-Panel) */}
+      {view !== "admin" && <div style={{ display: "flex", background: "#fff", borderTop: `1px solid ${T.brd}`, padding: "6px 0", paddingBottom: "max(8px, env(safe-area-inset-bottom))", flexShrink: 0 }}>
+        {[["map","🗺️","Karte"],["list","📋","Liste"]].map(([id, ic, lb]) => (
           <button key={id} onClick={() => { setView(id); }}
             style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0", background: "none", border: "none", color: view === id ? T.pri : T.mut, fontSize: 10, fontWeight: view === id ? 700 : 500, cursor: "pointer" }}>
             <span style={{ fontSize: 22 }}>{ic}</span>
             {lb}
           </button>
         ))}
-      </div>
+      </div>}
 
       {toast && <div style={{ position: "fixed", bottom: 70, left: "50%", transform: "translateX(-50%)", background: T.priDk, color: "#fff", padding: "10px 20px", borderRadius: 30, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,.2)", whiteSpace: "nowrap" }}>{toast}</div>}
     </div>
