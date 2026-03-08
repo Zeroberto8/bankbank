@@ -111,6 +111,8 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const [userPos, setUserPos] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   // Admin state
   const [adminAuth, setAdminAuth] = useState(false);
   const [adminUser, setAdminUser] = useState("");
@@ -351,6 +353,7 @@ export default function App() {
   }, [zoom, cLng, cLat, mapSize, worldSize]);
 
   const addBench = async () => {
+    if (submittingRef.current) return;
     if (!newTitle.trim() || !newPos || !newRating) return;
 
     // Inhaltsmoderation
@@ -359,36 +362,47 @@ export default function App() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("benches")
-      .insert({
-        title: newTitle.trim(),
-        description: newDesc.trim() || null,
-        lat: newPos.lat,
-        lng: newPos.lng,
-        photo_url: newPhoto,
+    submittingRef.current = true;
+    setSubmitting(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("benches")
+        .insert({
+          title: newTitle.trim(),
+          description: newDesc.trim() || null,
+          lat: newPos.lat,
+          lng: newPos.lng,
+          photo_url: newPhoto,
+          user_name: "Du",
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Fehler beim Speichern:", error);
+        flash("Fehler beim Speichern!");
+        return;
+      }
+
+      // Bewertung vom Ersteller einfügen
+      await supabase.from("comments").insert({
+        bench_id: data.id,
         user_name: "Du",
-      })
-      .select()
-      .single();
+        rating: newRating,
+        text: null,
+      });
 
-    if (error) {
-      console.error("Fehler beim Speichern:", error);
+      setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewRating(0); setNewPos(null); setView("map");
+      flash("🪑 Bank hinzugefügt!");
+      fetchBenches();
+    } catch (e) {
+      console.error("Fehler:", e);
       flash("Fehler beim Speichern!");
-      return;
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
-
-    // Bewertung vom Ersteller einfügen
-    await supabase.from("comments").insert({
-      bench_id: data.id,
-      user_name: "Du",
-      rating: newRating,
-      text: null,
-    });
-
-    setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewRating(0); setNewPos(null); setView("map");
-    flash("🪑 Bank hinzugefügt!");
-    fetchBenches();
   };
 
   // Admin: Bank löschen
@@ -425,6 +439,7 @@ export default function App() {
         .bb-root { height: 100vh; height: 100dvh; }
         .pulse { animation: p 2s ease-out infinite; }
         @keyframes p { 0%{transform:scale(.5);opacity:.8} 100%{transform:scale(1.8);opacity:0} }
+        @keyframes spin { to{transform:rotate(360deg)} }
         input:focus,textarea:focus{border-color:${T.pri} !important}
       `}</style>
 
@@ -549,7 +564,7 @@ export default function App() {
               )}</div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Bewertung *</label>
               <Stars rating={newRating} size={28} interactive onRate={setNewRating} /></div>
-            <button onClick={addBench} disabled={!newTitle.trim() || !newPos || !newRating} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: (!newTitle.trim() || !newPos || !newRating) ? .5 : 1 }}>Eintragen ✓</button>
+            <button onClick={addBench} disabled={!newTitle.trim() || !newPos || !newRating || submitting} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: (!newTitle.trim() || !newPos || !newRating || submitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>{submitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}{submitting ? "Wird gespeichert..." : "Eintragen ✓"}</button>
           </div>
         </div>
       )}
