@@ -26,6 +26,52 @@ const dist = (lat1, lng1, lat2, lng2) => {
 };
 const fmtDist = (km) => km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 
+// Inhaltsmoderation: blockiert diskriminierende, rassistische und pornografische Begriffe
+const BLOCKED_WORDS = [
+  // Rassismus / Diskriminierung (DE)
+  "neger", "nigger", "nigga", "kanake", "kanacke", "kümmeltürke", "kuemmeltuerke",
+  "schlitzauge", "kameltreiber", "zigeuner", "zigeunerin", "polacke", "polack",
+  "spaghettifresser", "itaker", "fidschifick", "hottentott", "bimbo",
+  "untermenschen", "untermensch", "herrenvolk", "herrenrasse", "arier",
+  "judensau", "judenschwein", "judenpack", "drecksjude", "saujude",
+  "drecksausländer", "ausländerraus", "scheissausländer", "scheißausländer",
+  // Rechtsextremismus
+  "sieg heil", "siegheil", "heil hitler", "heilhitler", "white power", "whitepower",
+  "volkstod", "rassenkrieg", "rassenkampf", "blut und ehre",
+  // Homophobie
+  "schwuchtel", "tunte", "kampflesbe",
+  // Pornografie / sexuell explizit (DE + EN)
+  "fotze", "hurensohn", "wichser", "wichse", "fick dich", "fickdich",
+  "blasen", "gangbang", "hardcore porn", "hardcoreporn", "hentai",
+  "pornostar", "sexslave", "sextoy",
+  // Rassismus (EN)
+  "wetback", "spic", "chink", "gook", "kike", "beaner", "cracker",
+  "redneck", "white trash", "whitetrash", "coon",
+  // Sonstiges
+  "hure", "nutte", "schlampe", "dreckschwein", "dreckssau",
+  "missgeburt", "behindert", "spast", "spasti", "mongo", "vollidiot",
+];
+
+const normalizeText = (text) => {
+  return text
+    .toLowerCase()
+    .replace(/[@]/g, "a")
+    .replace(/[0ø]/g, "o")
+    .replace(/[1!|]/g, "i")
+    .replace(/[3€]/g, "e")
+    .replace(/[$5]/g, "s")
+    .replace(/[7]/g, "t")
+    .replace(/[8]/g, "b")
+    .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+    .replace(/[_\-.*+]/g, "");
+};
+
+const containsBadWords = (text) => {
+  if (!text) return false;
+  const normalized = normalizeText(text);
+  return BLOCKED_WORDS.some(w => normalized.includes(normalizeText(w)));
+};
+
 const T = { bg: "#F7F3ED", pri: "#4A7C28", priDk: "#2D5016", acc: "#E8A838", txt: "#2C2416", mut: "#8C7E6A", brd: "#E8E0D4" };
 const btnStyle = { width: 44, height: 44, borderRadius: 12, border: "none", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", display: "flex", alignItems: "center", justifyContent: "center" };
 
@@ -291,6 +337,12 @@ export default function App() {
 
   const addBench = async () => {
     if (!newTitle.trim() || !newPos || !newRating) return;
+
+    // Inhaltsmoderation
+    if (containsBadWords(newTitle) || containsBadWords(newDesc)) {
+      flash("⚠️ Dein Eintrag enthält unangemessene Begriffe und kann nicht gespeichert werden.");
+      return;
+    }
 
     const { data, error } = await supabase
       .from("benches")
