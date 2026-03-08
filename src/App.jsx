@@ -58,6 +58,7 @@ export default function App() {
   const [editBench, setEditBench] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
 
   // Hash-basierter Admin-Zugang: #admin in der URL öffnet das Admin-Panel
   useEffect(() => {
@@ -557,6 +558,34 @@ export default function App() {
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => { setAdminAuth(false); setAdminUser(""); setAdminPass(""); setView("map"); window.history.replaceState(null, "", window.location.pathname); }}
                 style={{ background: "rgba(255,255,255,.2)", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer" }}>Abmelden</button>
+            </div>
+          </div>
+
+          {/* E-Mail Report Card */}
+          <div style={{ margin: "12px 16px", background: "#fff", borderRadius: 14, padding: 14, border: `1px solid ${T.brd}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 14 }}>📧 Tagesbericht</h3>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: T.mut }}>Neue Bänke per E-Mail · täglich 20:00 Uhr</p>
+              </div>
+              <button
+                onClick={async () => {
+                  setEmailSending(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke("daily-bench-report");
+                    if (error) throw error;
+                    flash(`📧 E-Mail gesendet! (${data?.benchesCount || 0} neue Bänke)`);
+                  } catch (e) {
+                    flash("❌ Fehler beim Senden – siehe Konsole");
+                    console.error("E-Mail Fehler:", e);
+                  }
+                  setEmailSending(false);
+                }}
+                disabled={emailSending}
+                style={{ background: T.pri, border: "none", color: "#fff", padding: "8px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: emailSending ? .5 : 1, whiteSpace: "nowrap" }}
+              >
+                {emailSending ? "Sendet..." : "Test senden"}
+              </button>
             </div>
           </div>
 
