@@ -416,6 +416,7 @@ export default function App() {
           <div data-btn="1" style={{ position: "absolute", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
             <button onClick={() => { if (userPos) { setCLat(userPos.lat); setCLng(userPos.lng); setZoom(13); flash("📍 Dein Standort"); } }} style={{ ...btnStyle, background: "#fff", color: userPos ? "#4285F4" : "#aaa" }}>◎</button>
             <button onClick={() => { if (userPos) { setNewPos({ lat: userPos.lat, lng: userPos.lng }); setView("add"); } else { flash("📍 Standort wird ermittelt..."); } }} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
+            <button onClick={() => setView("list")} style={{ ...btnStyle, background: "#fff", color: T.pri }}>📋</button>
           </div>
 
           <div style={{ position: "absolute", bottom: 4, left: 4, fontSize: 8, color: "#666", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3, zIndex: 10 }}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenStreetMap</a> © <a href="https://carto.com/" target="_blank" rel="noreferrer" style={{ color: "#666" }}>CARTO</a></div>
@@ -487,7 +488,7 @@ export default function App() {
 
       {/* === LIST VIEW === */}
       {view === "list" && (
-        <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
+        <div style={{ flex: 1, overflow: "auto", background: T.bg, position: "relative" }}>
           <div style={{ padding: "12px 16px 6px" }}><input type="text" placeholder="🔍 Bank suchen..." value={search} onChange={e => setSearch(e.target.value)} style={inp} /></div>
           {filtered.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke gefunden 🪑</p>}
           {[...filtered].sort((a, b) => {
@@ -506,6 +507,11 @@ export default function App() {
               </div>
             );
           })}
+          {/* Floating Buttons rechts unten */}
+          <div style={{ position: "fixed", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
+            <button onClick={() => { if (userPos) { setNewPos({ lat: userPos.lat, lng: userPos.lng }); setView("add"); } else { flash("📍 Standort wird ermittelt..."); } }} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
+            <button onClick={() => setView("map")} style={{ ...btnStyle, background: "#fff", color: T.pri }}>🗺️</button>
+          </div>
         </div>
       )}
 
@@ -601,18 +607,7 @@ export default function App() {
         </div>
       )}
 
-      {/* NAV (nur anzeigen wenn NICHT im Admin-Panel) */}
-      {view !== "admin" && <div style={{ display: "flex", background: "#fff", borderTop: `1px solid ${T.brd}`, padding: "6px 0", paddingBottom: "max(8px, env(safe-area-inset-bottom))", flexShrink: 0 }}>
-        {[["map","🗺️","Karte"],["list","📋","Liste"]].map(([id, ic, lb]) => (
-          <button key={id} onClick={() => { setView(id); }}
-            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0", background: "none", border: "none", color: view === id ? T.pri : T.mut, fontSize: 10, fontWeight: view === id ? 700 : 500, cursor: "pointer" }}>
-            <span style={{ fontSize: 22 }}>{ic}</span>
-            {lb}
-          </button>
-        ))}
-      </div>}
-
-      {toast && <div style={{ position: "fixed", bottom: 70, left: "50%", transform: "translateX(-50%)", background: T.priDk, color: "#fff", padding: "10px 20px", borderRadius: 30, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,.2)", whiteSpace: "nowrap" }}>{toast}</div>}
+      {toast && <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: T.priDk, color: "#fff", padding: "10px 20px", borderRadius: 30, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,.2)", whiteSpace: "nowrap" }}>{toast}</div>}
     </div>
   );
 }
