@@ -572,11 +572,19 @@ export default function App() {
                 onClick={async () => {
                   setEmailSending(true);
                   try {
-                    const { data, error } = await supabase.functions.invoke("daily-bench-report");
-                    if (error) throw error;
-                    flash(`📧 E-Mail gesendet! (${data?.benchesCount || 0} neue Bänke)`);
+                    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/daily-bench-report`, {
+                      method: "POST",
+                      headers: {
+                        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: "{}",
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || "Unbekannter Fehler");
+                    flash(`📧 E-Mail gesendet! (${data.benchesCount || 0} neue Bänke)`);
                   } catch (e) {
-                    flash("❌ Fehler beim Senden – siehe Konsole");
+                    flash("❌ Fehler: " + e.message);
                     console.error("E-Mail Fehler:", e);
                   }
                   setEmailSending(false);
