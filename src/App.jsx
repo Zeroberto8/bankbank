@@ -37,19 +37,34 @@ const BLOCKED_WORDS = [
   "drecksausländer", "ausländerraus", "scheissausländer", "scheißausländer",
   // Rechtsextremismus
   "sieg heil", "siegheil", "heil hitler", "heilhitler", "white power", "whitepower",
-  "volkstod", "rassenkrieg", "rassenkampf", "blut und ehre",
+  "volkstod", "rassenkrieg", "rassenkampf", "blut und ehre", "hakenkreuz",
+  "reichskristallnacht", "drittes reich", "nsdap", "88", "1488",
   // Homophobie
-  "schwuchtel", "tunte", "kampflesbe",
-  // Pornografie / sexuell explizit (DE + EN)
-  "fotze", "hurensohn", "wichser", "wichse", "fick dich", "fickdich",
-  "blasen", "gangbang", "hardcore porn", "hardcoreporn", "hentai",
-  "pornostar", "sexslave", "sextoy",
+  "schwuchtel", "schwuchteln", "tunte", "kampflesbe", "homo", "lesbe",
+  "transe", "shemale",
+  // Vulgär / sexuell explizit (DE)
+  "fotze", "möse", "moese", "muschi", "titte", "titten", "geil", "geile", "geiler", "geiles", "geilem", "geilen",
+  "hurensohn", "wichser", "wichse", "wichsen", "fick", "ficken", "ficker", "gefickt",
+  "fick dich", "fickdich", "arschfick", "arschloch", "arschlöcher",
+  "schwanz", "penis", "vagina", "anal", "orgasmus", "orgie",
+  "blasen", "blowjob", "handjob", "gangbang", "deepthroat",
+  "hardcore", "hentai", "porno", "pornostar", "sexslave", "sextoy",
+  "dildo", "domina", "bdsm", "fetisch", "ejakulation", "sperma",
+  "nackt", "nackig", "stripclub", "bordell", "freier",
+  // Vulgär / sexuell explizit (EN)
+  "fuck", "fucker", "fucking", "shit", "asshole", "bitch", "cunt", "dick",
+  "pussy", "cock", "boobs", "tits", "slut", "whore", "porn",
   // Rassismus (EN)
   "wetback", "spic", "chink", "gook", "kike", "beaner", "cracker",
   "redneck", "white trash", "whitetrash", "coon",
-  // Sonstiges
-  "hure", "nutte", "schlampe", "dreckschwein", "dreckssau",
-  "missgeburt", "behindert", "spast", "spasti", "mongo", "vollidiot",
+  // Beleidigungen / Diskriminierung
+  "hure", "nutte", "schlampe", "dreckschwein", "dreckssau", "drecksau",
+  "missgeburt", "behindert", "behinderter", "behinderte",
+  "spast", "spasti", "spastik", "mongo", "mongoloid",
+  "vollidiot", "hurenkind", "bastard", "wixer",
+  "depp", "trottel", "idiot", "kretin", "dumme sau",
+  "scheisse", "scheiße", "kacke", "pisser", "pisse",
+  "verrecken", "vergasen", "umbringen", "abstechen", "abknallen",
 ];
 
 const normalizeText = (text) => {
