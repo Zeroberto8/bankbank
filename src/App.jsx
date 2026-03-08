@@ -507,9 +507,8 @@ export default function App() {
               </div>
             );
           })}
-          {/* Floating Buttons rechts unten */}
-          <div style={{ position: "fixed", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
-            <button onClick={() => { if (userPos) { setNewPos({ lat: userPos.lat, lng: userPos.lng }); setView("add"); } else { flash("📍 Standort wird ermittelt..."); } }} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
+          {/* Floating Button rechts unten */}
+          <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 20 }}>
             <button onClick={() => setView("map")} style={{ ...btnStyle, background: "#fff", color: T.pri }}>🗺️</button>
           </div>
         </div>
