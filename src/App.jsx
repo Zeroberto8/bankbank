@@ -460,27 +460,17 @@ export default function App() {
         <div style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20 }}>{loading ? "..." : benches.length} Bänke</div>
       </div>
 
-      {/* === LOADING / ERROR STATE === */}
-      {(loading || fetchError) && view === "map" && (
+      {/* === ERROR STATE (nur bei Fehler, blockiert Karte) === */}
+      {fetchError && view === "map" && (
         <div style={{ flex: 1, background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-          {loading && !fetchError && (
-            <>
-              <div style={{ width: 36, height: 36, border: `3px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-              <p style={{ margin: 0, fontSize: 15, color: T.mut, fontWeight: 500 }}>Bänke werden geladen...</p>
-            </>
-          )}
-          {fetchError && (
-            <>
-              <span style={{ fontSize: 36 }}>⚠️</span>
-              <p style={{ margin: 0, fontSize: 15, color: "#dc3545", fontWeight: 600, textAlign: "center", padding: "0 32px" }}>{fetchError}</p>
-              <button onClick={fetchBenches} style={{ marginTop: 8, padding: "10px 24px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Erneut versuchen</button>
-            </>
-          )}
+          <span style={{ fontSize: 36 }}>⚠️</span>
+          <p style={{ margin: 0, fontSize: 15, color: "#dc3545", fontWeight: 600, textAlign: "center", padding: "0 32px" }}>{fetchError}</p>
+          <button onClick={fetchBenches} style={{ marginTop: 8, padding: "10px 24px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Erneut versuchen</button>
         </div>
       )}
 
-      {/* === MAP VIEW === */}
-      {view === "map" && !loading && !fetchError && (
+      {/* === MAP VIEW (sofort sichtbar, auch während Laden) === */}
+      {view === "map" && !fetchError && (
         <div ref={mapRef} style={{ flex: 1, position: "relative", overflow: "hidden", touchAction: "none", cursor: "grab", background: "#dce8f1", userSelect: "none" }}
           onPointerDown={onPtrDown} onPointerMove={onPtrMove} onPointerUp={onPtrUp} onWheel={onWhl}>
 
@@ -520,6 +510,14 @@ export default function App() {
               </div>
             ) : null;
           })()}
+
+          {/* Lade-Anzeige auf der Karte */}
+          {loading && (
+            <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 30, background: "#fff", padding: "8px 16px", borderRadius: 20, boxShadow: "0 2px 12px rgba(0,0,0,.15)", display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 16, height: 16, border: `2px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <span style={{ fontSize: 13, color: T.mut, fontWeight: 500 }}>Bänke werden geladen...</span>
+            </div>
+          )}
 
           {/* Buttons rechts unten */}
           <div data-btn="1" style={{ position: "absolute", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
