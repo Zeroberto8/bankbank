@@ -100,6 +100,7 @@ const world2lat = (y) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Mat
 export default function App() {
   const [benches, setBenches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [view, setView] = useState("map");
   const [sel, setSel] = useState(null);
   const [addMode, setAddMode] = useState(false);
@@ -189,13 +190,21 @@ export default function App() {
   // Supabase: Alle Bänke laden
   const fetchBenches = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("benches")
-      .select("*, comments(*)")
-      .order("created_at", { ascending: false });
+    setFetchError(null);
+    try {
+      const { data, error } = await supabase
+        .from("benches")
+        .select("*, comments(*)")
+        .order("created_at", { ascending: false });
 
-    if (!error && data) {
-      setBenches(data.map(b => ({
+      if (error) {
+        console.error("Fehler beim Laden:", error);
+        setFetchError(`Fehler beim Laden der Bänke: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      setBenches((data || []).map(b => ({
         id: b.id,
         lat: b.lat,
         lng: b.lng,
@@ -215,8 +224,9 @@ export default function App() {
             date: new Date(c.created_at).toISOString().split("T")[0],
           })),
       })));
-    } else if (error) {
-      console.error("Fehler beim Laden:", error);
+    } catch (e) {
+      console.error("Netzwerkfehler:", e);
+      setFetchError("Verbindung zu Supabase fehlgeschlagen. Bitte prüfe deine Internetverbindung.");
     }
     setLoading(false);
   }, []);
@@ -453,8 +463,27 @@ export default function App() {
         <div style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20 }}>{loading ? "..." : benches.length} Bänke</div>
       </div>
 
+      {/* === LOADING / ERROR STATE === */}
+      {(loading || fetchError) && view === "map" && (
+        <div style={{ flex: 1, background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+          {loading && !fetchError && (
+            <>
+              <div style={{ width: 36, height: 36, border: `3px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <p style={{ margin: 0, fontSize: 15, color: T.mut, fontWeight: 500 }}>Bänke werden geladen...</p>
+            </>
+          )}
+          {fetchError && (
+            <>
+              <span style={{ fontSize: 36 }}>⚠️</span>
+              <p style={{ margin: 0, fontSize: 15, color: "#dc3545", fontWeight: 600, textAlign: "center", padding: "0 32px" }}>{fetchError}</p>
+              <button onClick={fetchBenches} style={{ marginTop: 8, padding: "10px 24px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Erneut versuchen</button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* === MAP VIEW === */}
-      {view === "map" && (
+      {view === "map" && !loading && !fetchError && (
         <div ref={mapRef} style={{ flex: 1, position: "relative", overflow: "hidden", touchAction: "none", cursor: "grab", background: "#dce8f1", userSelect: "none" }}
           onPointerDown={onPtrDown} onPointerMove={onPtrMove} onPointerUp={onPtrUp} onWheel={onWhl}>
 
@@ -573,7 +602,9 @@ export default function App() {
       {view === "list" && (
         <div style={{ flex: 1, overflow: "auto", background: T.bg, position: "relative" }}>
           <div style={{ padding: "12px 16px 6px" }}><input type="text" placeholder="🔍 Bank suchen..." value={search} onChange={e => setSearch(e.target.value)} style={inp} /></div>
-          {filtered.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke gefunden 🪑</p>}
+          {loading && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 40 }}><div style={{ width: 28, height: 28, border: `3px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} /><p style={{ margin: 0, fontSize: 14, color: T.mut }}>Bänke werden geladen...</p></div>}
+          {fetchError && <div style={{ textAlign: "center", padding: 40 }}><p style={{ fontSize: 14, color: "#dc3545", fontWeight: 600 }}>{fetchError}</p><button onClick={fetchBenches} style={{ marginTop: 8, padding: "8px 20px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Erneut versuchen</button></div>}
+          {!loading && !fetchError && filtered.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke gefunden 🪑</p>}
           {[...filtered].sort((a, b) => {
             if (!userPos) return 0;
             return dist(userPos.lat, userPos.lng, a.lat, a.lng) - dist(userPos.lat, userPos.lng, b.lat, b.lng);
