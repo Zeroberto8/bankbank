@@ -90,6 +90,32 @@ const containsBadWords = (text) => {
 const T = { bg: "#F7F3ED", pri: "#4A7C28", priDk: "#2D5016", acc: "#E8A838", txt: "#2C2416", mut: "#8C7E6A", brd: "#E8E0D4" };
 const btnStyle = { width: 44, height: 44, borderRadius: 12, border: "none", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", display: "flex", alignItems: "center", justifyContent: "center" };
 
+// Foto komprimieren: max 800px, JPEG Qualität 0.7 (~50-150 KB statt 5-11 MB)
+const compressImage = (file) =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 800;
+      let { width: w, height: h } = img;
+      if (w > MAX || h > MAX) {
+        const scale = MAX / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Komprimierung fehlgeschlagen"))),
+        "image/jpeg",
+        0.7
+      );
+    };
+    img.onerror = () => reject(new Error("Bild konnte nicht geladen werden"));
+    img.src = URL.createObjectURL(file);
+  });
+
 // Mercator projection helpers
 const lat2world = (lat) => {
   const r = lat * Math.PI / 180;
@@ -194,7 +220,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("benches")
-        .select("id, title, description, lat, lng, photo_url, user_name, created_at")
+        .select("id, title, description, lat, lng, user_name, created_at")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -203,7 +229,7 @@ export default function App() {
         id: b.id, lat: b.lat, lng: b.lng,
         title: b.title,
         description: b.description || "",
-        photo: b.photo_url,
+        photo: null,
         user: b.user_name,
         date: new Date(b.created_at).toISOString().split("T")[0],
         ratings: [],
@@ -216,19 +242,24 @@ export default function App() {
     setLoading(false);
   }, []);
 
-  // Kommentare für eine einzelne Bank nachladen (bei Klick)
+  // Kommentare + Foto für eine einzelne Bank nachladen (bei Klick)
   const [detailLoading, setDetailLoading] = useState(false);
   const fetchCommentsFor = useCallback(async (bench) => {
     setDetailLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("comments")
-        .select("id, user_name, text, rating, created_at")
-        .eq("bench_id", bench.id);
+      // Kommentare und Foto parallel laden
+      const [commentsRes, photoRes] = await Promise.all([
+        supabase.from("comments").select("id, user_name, text, rating, created_at").eq("bench_id", bench.id),
+        bench.photo ? Promise.resolve(null) : supabase.from("benches").select("photo_url").eq("id", bench.id).single(),
+      ]);
 
-      if (!error && data) {
+      const data = commentsRes.data;
+      const photo = bench.photo || photoRes?.data?.photo_url || null;
+
+      if (!commentsRes.error && data) {
         const updated = {
           ...bench,
+          photo,
           ratings: data.map(c => c.rating),
           comments: data.filter(c => c.text).map(c => ({
             id: c.id, user: c.user_name, text: c.text,
@@ -389,6 +420,22 @@ export default function App() {
     setSubmitting(true);
 
     try {
+      // Foto in Supabase Storage hochladen (falls vorhanden)
+      let photoUrl = null;
+      if (newPhoto?.blob) {
+        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("bench-photos")
+          .upload(fileName, newPhoto.blob, { contentType: "image/jpeg", cacheControl: "31536000" });
+
+        if (uploadError) {
+          console.error("Foto-Upload fehlgeschlagen:", uploadError);
+        } else {
+          const { data: urlData } = supabase.storage.from("bench-photos").getPublicUrl(fileName);
+          photoUrl = urlData.publicUrl;
+        }
+      }
+
       const { data, error } = await supabase
         .from("benches")
         .insert({
@@ -396,7 +443,7 @@ export default function App() {
           description: newDesc.trim() || null,
           lat: newPos.lat,
           lng: newPos.lng,
-          photo_url: newPhoto,
+          photo_url: photoUrl,
           user_name: "Du",
         })
         .select()
@@ -416,6 +463,7 @@ export default function App() {
         text: null,
       });
 
+      if (newPhoto?.preview) URL.revokeObjectURL(newPhoto.preview);
       setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewRating(0); setNewPos(null); setView("map");
       flash("🪑 Bank hinzugefügt!");
       fetchBenches();
@@ -449,7 +497,18 @@ export default function App() {
     fetchBenches();
   };
 
-  const onPhoto = (e) => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setNewPhoto(ev.target.result); r.readAsDataURL(f); } };
+  const onPhoto = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const blob = await compressImage(f);
+      const preview = URL.createObjectURL(blob);
+      setNewPhoto({ blob, preview });
+    } catch (err) {
+      console.error("Foto-Komprimierung fehlgeschlagen:", err);
+      flash("Foto konnte nicht verarbeitet werden.");
+    }
+  };
 
   const filtered = benches.filter(b => b.title.toLowerCase().includes(search.toLowerCase()) || b.description.toLowerCase().includes(search.toLowerCase()));
 
@@ -604,8 +663,8 @@ export default function App() {
               <textarea placeholder="Was macht sie besonders?" value={newDesc} onChange={e => setNewDesc(e.target.value)} style={{ ...inp, minHeight: 60, resize: "vertical" }} /></div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto</label>
               {newPhoto ? (
-                <div style={{ position: "relative" }}><img src={newPhoto} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
-                  <button onClick={() => setNewPhoto(null)} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
+                <div style={{ position: "relative" }}><img src={newPhoto.preview} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
+                  <button onClick={() => { if (newPhoto?.preview) URL.revokeObjectURL(newPhoto.preview); setNewPhoto(null); }} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
               ) : (
                 <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 80, border: `2px dashed ${T.brd}`, borderRadius: 12, cursor: "pointer", color: T.mut, fontSize: 13, gap: 4 }}>
                   <span style={{ fontSize: 24 }}>📷</span>Foto aufnehmen
