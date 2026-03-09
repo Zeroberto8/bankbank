@@ -1,17 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-
-// Supabase-Client nur für Schreiboperationen, wird lazy geladen
-let _supabase = null;
-const getSupabase = async () => {
-  if (!_supabase) {
-    const { createClient } = await import("@supabase/supabase-js");
-    _supabase = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY
-    );
-  }
-  return _supabase;
-};
+import { supabase } from "./lib/supabase";
 
 const avg = (r) => r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) : "–";
 
@@ -199,39 +187,18 @@ export default function App() {
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-  // REST-API Helper mit automatischen Wiederholungsversuchen
-  const apiBase = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
-  const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const api = useCallback(async (table, query, retries = 3) => {
-    const url = `${apiBase}/${table}?${query}`;
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        console.log(`[BankBank] Fetch ${table} (Versuch ${attempt}/${retries})`);
-        const r = await fetch(url, {
-          headers: { apikey: apiKey, Authorization: `Bearer ${apiKey}` },
-        });
-        if (r.status === 522 || r.status === 503 || r.status === 504) {
-          if (attempt < retries) { await new Promise(w => setTimeout(w, attempt * 2000)); continue; }
-        }
-        if (!r.ok) { const t = await r.text(); throw new Error(`${r.status}: ${t}`); }
-        return r.json();
-      } catch (e) {
-        if (attempt < retries && e.message?.includes("Failed to fetch")) {
-          console.log(`[BankBank] Versuch ${attempt} fehlgeschlagen, warte ${attempt * 2}s...`);
-          await new Promise(w => setTimeout(w, attempt * 2000));
-          continue;
-        }
-        throw e;
-      }
-    }
-  }, [apiBase, apiKey]);
-
-  // Nur Bench-Marker laden (schnell, kein JOIN, keine Kommentare)
+  // Bänke laden (nur Marker-Daten, keine Kommentare)
   const fetchBenches = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
     try {
-      const data = await api("benches", "select=id,title,description,lat,lng,photo_url,user_name,created_at&order=created_at.desc");
+      const { data, error } = await supabase
+        .from("benches")
+        .select("id, title, description, lat, lng, photo_url, user_name, created_at")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
       setBenches(data.map(b => ({
         id: b.id, lat: b.lat, lng: b.lng,
         title: b.title,
@@ -243,34 +210,40 @@ export default function App() {
         comments: [],
       })));
     } catch (e) {
-      console.error("Fehler:", e);
+      console.error("Fehler beim Laden:", e);
       setFetchError(`Fehler beim Laden der Bänke: ${e.message}`);
     }
     setLoading(false);
-  }, [api]);
+  }, []);
 
   // Kommentare für eine einzelne Bank nachladen (bei Klick)
   const [detailLoading, setDetailLoading] = useState(false);
   const fetchCommentsFor = useCallback(async (bench) => {
     setDetailLoading(true);
     try {
-      const comments = await api("comments", `select=id,user_name,text,rating,created_at&bench_id=eq.${bench.id}`);
-      const updated = {
-        ...bench,
-        ratings: comments.map(c => c.rating),
-        comments: comments.filter(c => c.text).map(c => ({
-          id: c.id, user: c.user_name, text: c.text,
-          rating: c.rating,
-          date: new Date(c.created_at).toISOString().split("T")[0],
-        })),
-      };
-      setSel(updated);
-      setBenches(prev => prev.map(b => b.id === bench.id ? updated : b));
+      const { data, error } = await supabase
+        .from("comments")
+        .select("id, user_name, text, rating, created_at")
+        .eq("bench_id", bench.id);
+
+      if (!error && data) {
+        const updated = {
+          ...bench,
+          ratings: data.map(c => c.rating),
+          comments: data.filter(c => c.text).map(c => ({
+            id: c.id, user: c.user_name, text: c.text,
+            rating: c.rating,
+            date: new Date(c.created_at).toISOString().split("T")[0],
+          })),
+        };
+        setSel(updated);
+        setBenches(prev => prev.map(b => b.id === bench.id ? updated : b));
+      }
     } catch (e) {
       console.error("Kommentare laden fehlgeschlagen:", e);
     }
     setDetailLoading(false);
-  }, [api]);
+  }, []);
 
   // Bank auswählen und Kommentare nachladen
   const selectBench = useCallback((bench) => {
@@ -416,8 +389,7 @@ export default function App() {
     setSubmitting(true);
 
     try {
-      const sb = await getSupabase();
-      const { data, error } = await sb
+      const { data, error } = await supabase
         .from("benches")
         .insert({
           title: newTitle.trim(),
@@ -437,7 +409,7 @@ export default function App() {
       }
 
       // Bewertung vom Ersteller einfügen
-      await sb.from("comments").insert({
+      await supabase.from("comments").insert({
         bench_id: data.id,
         user_name: "Du",
         rating: newRating,
@@ -458,8 +430,7 @@ export default function App() {
 
   // Admin: Bank löschen
   const deleteBench = async (id) => {
-    const sb = await getSupabase();
-    const { error } = await sb.from("benches").delete().eq("id", id);
+    const { error } = await supabase.from("benches").delete().eq("id", id);
     if (error) { flash("Fehler beim Löschen!"); return; }
     flash("🗑️ Bank gelöscht!");
     fetchBenches();
@@ -468,8 +439,7 @@ export default function App() {
   // Admin: Bank bearbeiten
   const updateBench = async () => {
     if (!editBench || !editTitle.trim()) return;
-    const sb = await getSupabase();
-    const { error } = await sb.from("benches").update({
+    const { error } = await supabase.from("benches").update({
       title: editTitle.trim(),
       description: editDesc.trim() || null,
     }).eq("id", editBench.id);
