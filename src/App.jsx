@@ -187,26 +187,19 @@ export default function App() {
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-  // REST-API Helper
-  const apiUrl = import.meta.env.VITE_SUPABASE_URL;
+  // REST-API Helper: apikey als URL-Parameter (kein CORS-Preflight!)
+  const apiBase = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
   const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const apiHeaders = useMemo(() => ({ apikey: apiKey, Authorization: `Bearer ${apiKey}` }), [apiKey]);
+  const api = useCallback((table, query) =>
+    fetch(`${apiBase}/${table}?apikey=${apiKey}&${query}`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); })),
+  [apiBase, apiKey]);
 
   // Nur Bench-Marker laden (schnell, kein JOIN, keine Kommentare)
   const fetchBenches = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch(
-        `${apiUrl}/rest/v1/benches?select=id,title,description,lat,lng,photo_url,user_name,created_at&order=created_at.desc`,
-        { headers: apiHeaders }
-      );
-      if (!res.ok) {
-        setFetchError(`Fehler beim Laden: ${await res.text()}`);
-        setLoading(false);
-        return;
-      }
-      const data = await res.json();
+      const data = await api("benches", "select=id,title,description,lat,lng,photo_url,user_name,created_at&order=created_at.desc");
       setBenches(data.map(b => ({
         id: b.id, lat: b.lat, lng: b.lng,
         title: b.title,
@@ -218,40 +211,34 @@ export default function App() {
         comments: [],
       })));
     } catch (e) {
-      console.error("Netzwerkfehler:", e);
-      setFetchError("Verbindung zu Supabase fehlgeschlagen. Bitte prüfe deine Internetverbindung.");
+      console.error("Fehler:", e);
+      setFetchError(`Fehler beim Laden der Bänke: ${e.message}`);
     }
     setLoading(false);
-  }, [apiUrl, apiHeaders]);
+  }, [api]);
 
   // Kommentare für eine einzelne Bank nachladen (bei Klick)
   const [detailLoading, setDetailLoading] = useState(false);
   const fetchCommentsFor = useCallback(async (bench) => {
     setDetailLoading(true);
     try {
-      const res = await fetch(
-        `${apiUrl}/rest/v1/comments?select=id,user_name,text,rating,created_at&bench_id=eq.${bench.id}`,
-        { headers: apiHeaders }
-      );
-      if (res.ok) {
-        const comments = await res.json();
-        const updated = {
-          ...bench,
-          ratings: comments.map(c => c.rating),
-          comments: comments.filter(c => c.text).map(c => ({
-            id: c.id, user: c.user_name, text: c.text,
-            rating: c.rating,
-            date: new Date(c.created_at).toISOString().split("T")[0],
-          })),
-        };
-        setSel(updated);
-        setBenches(prev => prev.map(b => b.id === bench.id ? updated : b));
-      }
+      const comments = await api("comments", `select=id,user_name,text,rating,created_at&bench_id=eq.${bench.id}`);
+      const updated = {
+        ...bench,
+        ratings: comments.map(c => c.rating),
+        comments: comments.filter(c => c.text).map(c => ({
+          id: c.id, user: c.user_name, text: c.text,
+          rating: c.rating,
+          date: new Date(c.created_at).toISOString().split("T")[0],
+        })),
+      };
+      setSel(updated);
+      setBenches(prev => prev.map(b => b.id === bench.id ? updated : b));
     } catch (e) {
       console.error("Kommentare laden fehlgeschlagen:", e);
     }
     setDetailLoading(false);
-  }, [apiUrl, apiHeaders]);
+  }, [api]);
 
   // Bank auswählen und Kommentare nachladen
   const selectBench = useCallback((bench) => {
