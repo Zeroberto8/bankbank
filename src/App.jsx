@@ -199,14 +199,16 @@ export default function App() {
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-  // REST-API Helper: apikey als URL-Parameter (kein CORS-Preflight!)
+  // REST-API Helper
   const apiBase = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
   const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   const api = useCallback(async (table, query) => {
-    const url = `${apiBase}/${table}?apikey=${apiKey}&${query}`;
+    const url = `${apiBase}/${table}?${query}`;
     console.log("[BankBank] Fetching:", url);
-    const r = await fetch(url);
-    if (!r.ok) { const t = await r.text(); throw new Error(t); }
+    const r = await fetch(url, {
+      headers: { apikey: apiKey, Authorization: `Bearer ${apiKey}` },
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error(`${r.status}: ${t}`); }
     return r.json();
   }, [apiBase, apiKey]);
 
