@@ -187,76 +187,81 @@ export default function App() {
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-  // Supabase: Alle Bänke laden (direkter REST-Aufruf, kein Supabase-Client)
+  // REST-API Helper
+  const apiUrl = import.meta.env.VITE_SUPABASE_URL;
+  const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const apiHeaders = useMemo(() => ({ apikey: apiKey, Authorization: `Bearer ${apiKey}` }), [apiKey]);
+
+  // Nur Bench-Marker laden (schnell, kein JOIN, keine Kommentare)
   const fetchBenches = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
     try {
-      const url = import.meta.env.VITE_SUPABASE_URL;
-      const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const headers = { apikey: key, Authorization: `Bearer ${key}` };
-
-      const [benchRes, commentRes] = await Promise.all([
-        fetch(`${url}/rest/v1/benches?select=id,title,description,lat,lng,photo_url,user_name,created_at&order=created_at.desc`, { headers }),
-        fetch(`${url}/rest/v1/comments?select=id,bench_id,user_name,text,rating,created_at`, { headers }),
-      ]);
-
-      if (!benchRes.ok) {
-        const err = await benchRes.text();
-        setFetchError(`Fehler beim Laden der Bänke: ${err}`);
+      const res = await fetch(
+        `${apiUrl}/rest/v1/benches?select=id,title,description,lat,lng,photo_url,user_name,created_at&order=created_at.desc`,
+        { headers: apiHeaders }
+      );
+      if (!res.ok) {
+        setFetchError(`Fehler beim Laden: ${await res.text()}`);
         setLoading(false);
         return;
       }
-
-      const benchData = await benchRes.json();
-      const commentData = commentRes.ok ? await commentRes.json() : [];
-
-      const commentsByBench = {};
-      for (const c of commentData) {
-        if (!commentsByBench[c.bench_id]) commentsByBench[c.bench_id] = [];
-        commentsByBench[c.bench_id].push(c);
-      }
-
-      setBenches(benchData.map(b => {
-        const bc = commentsByBench[b.id] || [];
-        return {
-          id: b.id,
-          lat: b.lat,
-          lng: b.lng,
-          title: b.title,
-          description: b.description || "",
-          photo: b.photo_url,
-          user: b.user_name,
-          date: new Date(b.created_at).toISOString().split("T")[0],
-          ratings: bc.map(c => c.rating),
-          comments: bc
-            .filter(c => c.text)
-            .map(c => ({
-              id: c.id,
-              user: c.user_name,
-              text: c.text,
-              rating: c.rating,
-              date: new Date(c.created_at).toISOString().split("T")[0],
-            })),
-        };
-      }));
+      const data = await res.json();
+      setBenches(data.map(b => ({
+        id: b.id, lat: b.lat, lng: b.lng,
+        title: b.title,
+        description: b.description || "",
+        photo: b.photo_url,
+        user: b.user_name,
+        date: new Date(b.created_at).toISOString().split("T")[0],
+        ratings: [],
+        comments: [],
+      })));
     } catch (e) {
       console.error("Netzwerkfehler:", e);
       setFetchError("Verbindung zu Supabase fehlgeschlagen. Bitte prüfe deine Internetverbindung.");
     }
     setLoading(false);
-  }, []);
+  }, [apiUrl, apiHeaders]);
+
+  // Kommentare für eine einzelne Bank nachladen (bei Klick)
+  const [detailLoading, setDetailLoading] = useState(false);
+  const fetchCommentsFor = useCallback(async (bench) => {
+    setDetailLoading(true);
+    try {
+      const res = await fetch(
+        `${apiUrl}/rest/v1/comments?select=id,user_name,text,rating,created_at&bench_id=eq.${bench.id}`,
+        { headers: apiHeaders }
+      );
+      if (res.ok) {
+        const comments = await res.json();
+        const updated = {
+          ...bench,
+          ratings: comments.map(c => c.rating),
+          comments: comments.filter(c => c.text).map(c => ({
+            id: c.id, user: c.user_name, text: c.text,
+            rating: c.rating,
+            date: new Date(c.created_at).toISOString().split("T")[0],
+          })),
+        };
+        setSel(updated);
+        setBenches(prev => prev.map(b => b.id === bench.id ? updated : b));
+      }
+    } catch (e) {
+      console.error("Kommentare laden fehlgeschlagen:", e);
+    }
+    setDetailLoading(false);
+  }, [apiUrl, apiHeaders]);
+
+  // Bank auswählen und Kommentare nachladen
+  const selectBench = useCallback((bench) => {
+    setSel(bench);
+    setView("detail");
+    fetchCommentsFor(bench);
+  }, [fetchCommentsFor]);
 
   // Beim Start laden
   useEffect(() => { fetchBenches(); }, [fetchBenches]);
-
-  // Detail-Ansicht aktualisieren wenn Bänke neu geladen werden
-  useEffect(() => {
-    if (sel) {
-      const updated = benches.find(b => b.id === sel.id);
-      if (updated) setSel(updated);
-    }
-  }, [benches]);
 
   // Mercator geo <-> pixel conversion
   const geo2px = useCallback((lat, lng) => {
@@ -506,7 +511,7 @@ export default function App() {
             if (p.x < -40 || p.x > mapSize.w + 40 || p.y < -60 || p.y > mapSize.h + 20) return null;
             const a = avg(b.ratings);
             return (
-              <div key={b.id} data-pin="1" onClick={e => { e.stopPropagation(); setSel(b); setView("detail"); }}
+              <div key={b.id} data-pin="1" onClick={e => { e.stopPropagation(); selectBench(b); }}
                 style={{ position: "absolute", left: p.x, top: p.y, transform: "translate(-50%,-100%)", cursor: "pointer", zIndex: 5 }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
                   <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.pri, border: "3px solid #fff", boxShadow: "0 2px 8px rgba(0,0,0,.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🪑</div>
@@ -567,7 +572,13 @@ export default function App() {
               <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
               <p style={{ margin: 0, fontSize: 13, color: T.mut, lineHeight: 1.5 }}>{sel.description}</p>
             </div>
-            {sel.comments.length > 0 && <div>
+            {detailLoading && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16 }}>
+                <div style={{ width: 16, height: 16, border: `2px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                <span style={{ fontSize: 13, color: T.mut }}>Bewertungen laden...</span>
+              </div>
+            )}
+            {!detailLoading && sel.comments.length > 0 && <div>
               <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Kommentare ({sel.comments.length})</h3>
               {sel.comments.map((c, i) => (
                 <div key={i} style={{ background: "#fff", borderRadius: 12, padding: 12, border: `1px solid ${T.brd}`, marginBottom: 8 }}>
@@ -579,6 +590,9 @@ export default function App() {
                 </div>
               ))}
             </div>}
+            {!detailLoading && sel.comments.length === 0 && sel.ratings.length === 0 && (
+              <p style={{ fontSize: 13, color: T.mut, textAlign: "center", padding: 8 }}>Noch keine Bewertungen</p>
+            )}
           </div>
         </div>
       )}
@@ -625,7 +639,7 @@ export default function App() {
           }).map(b => {
             const d = userPos ? dist(userPos.lat, userPos.lng, b.lat, b.lng) : null;
             return (
-              <div key={b.id} onClick={() => { setSel(b); setView("detail"); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer" }}>
+              <div key={b.id} onClick={() => { selectBench(b); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
                   {d !== null && <span style={{ fontSize: 11, color: T.pri, fontWeight: 600, whiteSpace: "nowrap", marginLeft: 8 }}>📍 {fmtDist(d)}</span>}
