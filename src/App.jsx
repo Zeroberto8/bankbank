@@ -202,9 +202,13 @@ export default function App() {
   // REST-API Helper: apikey als URL-Parameter (kein CORS-Preflight!)
   const apiBase = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
   const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const api = useCallback((table, query) =>
-    fetch(`${apiBase}/${table}?apikey=${apiKey}&${query}`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); })),
-  [apiBase, apiKey]);
+  const api = useCallback(async (table, query) => {
+    const url = `${apiBase}/${table}?apikey=${apiKey}&${query}`;
+    console.log("[BankBank] Fetching:", url);
+    const r = await fetch(url);
+    if (!r.ok) { const t = await r.text(); throw new Error(t); }
+    return r.json();
+  }, [apiBase, apiKey]);
 
   // Nur Bench-Marker laden (schnell, kein JOIN, keine Kommentare)
   const fetchBenches = useCallback(async () => {
