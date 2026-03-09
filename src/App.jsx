@@ -1,5 +1,17 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { supabase } from "./lib/supabase";
+
+// Supabase-Client nur für Schreiboperationen, wird lazy geladen
+let _supabase = null;
+const getSupabase = async () => {
+  if (!_supabase) {
+    const { createClient } = await import("@supabase/supabase-js");
+    _supabase = createClient(
+      import.meta.env.VITE_SUPABASE_URL,
+      import.meta.env.VITE_SUPABASE_ANON_KEY
+    );
+  }
+  return _supabase;
+};
 
 const avg = (r) => r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) : "–";
 
@@ -384,7 +396,8 @@ export default function App() {
     setSubmitting(true);
 
     try {
-      const { data, error } = await supabase
+      const sb = await getSupabase();
+      const { data, error } = await sb
         .from("benches")
         .insert({
           title: newTitle.trim(),
@@ -404,7 +417,7 @@ export default function App() {
       }
 
       // Bewertung vom Ersteller einfügen
-      await supabase.from("comments").insert({
+      await sb.from("comments").insert({
         bench_id: data.id,
         user_name: "Du",
         rating: newRating,
@@ -425,7 +438,8 @@ export default function App() {
 
   // Admin: Bank löschen
   const deleteBench = async (id) => {
-    const { error } = await supabase.from("benches").delete().eq("id", id);
+    const sb = await getSupabase();
+    const { error } = await sb.from("benches").delete().eq("id", id);
     if (error) { flash("Fehler beim Löschen!"); return; }
     flash("🗑️ Bank gelöscht!");
     fetchBenches();
@@ -434,7 +448,8 @@ export default function App() {
   // Admin: Bank bearbeiten
   const updateBench = async () => {
     if (!editBench || !editTitle.trim()) return;
-    const { error } = await supabase.from("benches").update({
+    const sb = await getSupabase();
+    const { error } = await sb.from("benches").update({
       title: editTitle.trim(),
       description: editDesc.trim() || null,
     }).eq("id", editBench.id);
