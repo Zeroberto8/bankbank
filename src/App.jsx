@@ -135,6 +135,7 @@ export default function App() {
   const [newDesc, setNewDesc] = useState("");
   const [newPhoto, setNewPhoto] = useState(null);
   const [newRating, setNewRating] = useState(0);
+  const [newUser, setNewUser] = useState(() => localStorage.getItem("bankbank_user") || "");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const [userPos, setUserPos] = useState(null);
@@ -408,10 +409,10 @@ export default function App() {
 
   const addBench = async () => {
     if (submittingRef.current) return;
-    if (!newTitle.trim() || !newPos || !newRating) return;
+    if (!newTitle.trim() || !newUser.trim() || !newPos || !newRating) return;
 
     // Inhaltsmoderation
-    if (containsBadWords(newTitle) || containsBadWords(newDesc)) {
+    if (containsBadWords(newTitle) || containsBadWords(newDesc) || containsBadWords(newUser)) {
       flash("⚠️ Dein Eintrag enthält unangemessene Begriffe und kann nicht gespeichert werden.");
       return;
     }
@@ -444,7 +445,7 @@ export default function App() {
           lat: newPos.lat,
           lng: newPos.lng,
           photo_url: photoUrl,
-          user_name: "Du",
+          user_name: newUser.trim(),
         })
         .select()
         .single();
@@ -458,11 +459,12 @@ export default function App() {
       // Bewertung vom Ersteller einfügen
       await supabase.from("comments").insert({
         bench_id: data.id,
-        user_name: "Du",
+        user_name: newUser.trim(),
         rating: newRating,
         text: null,
       });
 
+      localStorage.setItem("bankbank_user", newUser.trim());
       if (newPhoto?.preview) URL.revokeObjectURL(newPhoto.preview);
       setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewRating(0); setNewPos(null); setView("map");
       flash("🪑 Bank hinzugefügt!");
@@ -657,7 +659,9 @@ export default function App() {
             {newPos && <p style={{ margin: "6px 0 0", fontSize: 12, opacity: .8 }}>📍 {newPos.lat.toFixed(4)}, {newPos.lng.toFixed(4)}</p>}
           </div>
           <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Name *</label>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Dein Name *</label>
+              <input type="text" placeholder="z.B. Anna M." value={newUser} onChange={e => setNewUser(e.target.value)} style={inp} /></div>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Name der Bank *</label>
               <input type="text" placeholder="z.B. Sonnenbank am See" value={newTitle} onChange={e => setNewTitle(e.target.value)} style={inp} /></div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Beschreibung</label>
               <textarea placeholder="Was macht sie besonders?" value={newDesc} onChange={e => setNewDesc(e.target.value)} style={{ ...inp, minHeight: 60, resize: "vertical" }} /></div>
@@ -672,7 +676,7 @@ export default function App() {
               )}</div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Bewertung *</label>
               <Stars rating={newRating} size={28} interactive onRate={setNewRating} /></div>
-            <button onClick={addBench} disabled={!newTitle.trim() || !newPos || !newRating || submitting} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: (!newTitle.trim() || !newPos || !newRating || submitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>{submitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}{submitting ? "Wird gespeichert..." : "Eintragen ✓"}</button>
+            <button onClick={addBench} disabled={!newTitle.trim() || !newUser.trim() || !newPos || !newRating || submitting} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: (!newTitle.trim() || !newUser.trim() || !newPos || !newRating || submitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>{submitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}{submitting ? "Wird gespeichert..." : "Eintragen ✓"}</button>
           </div>
         </div>
       )}
