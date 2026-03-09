@@ -187,40 +187,59 @@ export default function App() {
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-  // Supabase: Alle Bänke laden (eine einzige RPC-Abfrage, serverseitig)
+  // Supabase: Alle Bänke laden (direkter REST-Aufruf, kein Supabase-Client)
   const fetchBenches = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
     try {
-      const { data, error } = await supabase.rpc("get_all_benches");
+      const url = import.meta.env.VITE_SUPABASE_URL;
+      const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const headers = { apikey: key, Authorization: `Bearer ${key}` };
 
-      if (error) {
-        console.error("Fehler beim Laden:", error);
-        setFetchError(`Fehler beim Laden der Bänke: ${error.message}`);
+      const [benchRes, commentRes] = await Promise.all([
+        fetch(`${url}/rest/v1/benches?select=id,title,description,lat,lng,photo_url,user_name,created_at&order=created_at.desc`, { headers }),
+        fetch(`${url}/rest/v1/comments?select=id,bench_id,user_name,text,rating,created_at`, { headers }),
+      ]);
+
+      if (!benchRes.ok) {
+        const err = await benchRes.text();
+        setFetchError(`Fehler beim Laden der Bänke: ${err}`);
         setLoading(false);
         return;
       }
 
-      setBenches((data || []).map(b => ({
-        id: b.id,
-        lat: b.lat,
-        lng: b.lng,
-        title: b.title,
-        description: b.description || "",
-        photo: b.photo_url,
-        user: b.user_name,
-        date: new Date(b.created_at).toISOString().split("T")[0],
-        ratings: (b.comments || []).map(c => c.rating),
-        comments: (b.comments || [])
-          .filter(c => c.text)
-          .map(c => ({
-            id: c.id,
-            user: c.user_name,
-            text: c.text,
-            rating: c.rating,
-            date: new Date(c.created_at).toISOString().split("T")[0],
-          })),
-      })));
+      const benchData = await benchRes.json();
+      const commentData = commentRes.ok ? await commentRes.json() : [];
+
+      const commentsByBench = {};
+      for (const c of commentData) {
+        if (!commentsByBench[c.bench_id]) commentsByBench[c.bench_id] = [];
+        commentsByBench[c.bench_id].push(c);
+      }
+
+      setBenches(benchData.map(b => {
+        const bc = commentsByBench[b.id] || [];
+        return {
+          id: b.id,
+          lat: b.lat,
+          lng: b.lng,
+          title: b.title,
+          description: b.description || "",
+          photo: b.photo_url,
+          user: b.user_name,
+          date: new Date(b.created_at).toISOString().split("T")[0],
+          ratings: bc.map(c => c.rating),
+          comments: bc
+            .filter(c => c.text)
+            .map(c => ({
+              id: c.id,
+              user: c.user_name,
+              text: c.text,
+              rating: c.rating,
+              date: new Date(c.created_at).toISOString().split("T")[0],
+            })),
+        };
+      }));
     } catch (e) {
       console.error("Netzwerkfehler:", e);
       setFetchError("Verbindung zu Supabase fehlgeschlagen. Bitte prüfe deine Internetverbindung.");
