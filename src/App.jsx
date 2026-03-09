@@ -199,17 +199,31 @@ export default function App() {
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-  // REST-API Helper
+  // REST-API Helper mit automatischen Wiederholungsversuchen
   const apiBase = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
   const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const api = useCallback(async (table, query) => {
+  const api = useCallback(async (table, query, retries = 3) => {
     const url = `${apiBase}/${table}?${query}`;
-    console.log("[BankBank] Fetching:", url);
-    const r = await fetch(url, {
-      headers: { apikey: apiKey, Authorization: `Bearer ${apiKey}` },
-    });
-    if (!r.ok) { const t = await r.text(); throw new Error(`${r.status}: ${t}`); }
-    return r.json();
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`[BankBank] Fetch ${table} (Versuch ${attempt}/${retries})`);
+        const r = await fetch(url, {
+          headers: { apikey: apiKey, Authorization: `Bearer ${apiKey}` },
+        });
+        if (r.status === 522 || r.status === 503 || r.status === 504) {
+          if (attempt < retries) { await new Promise(w => setTimeout(w, attempt * 2000)); continue; }
+        }
+        if (!r.ok) { const t = await r.text(); throw new Error(`${r.status}: ${t}`); }
+        return r.json();
+      } catch (e) {
+        if (attempt < retries && e.message?.includes("Failed to fetch")) {
+          console.log(`[BankBank] Versuch ${attempt} fehlgeschlagen, warte ${attempt * 2}s...`);
+          await new Promise(w => setTimeout(w, attempt * 2000));
+          continue;
+        }
+        throw e;
+      }
+    }
   }, [apiBase, apiKey]);
 
   // Nur Bench-Marker laden (schnell, kein JOIN, keine Kommentare)
