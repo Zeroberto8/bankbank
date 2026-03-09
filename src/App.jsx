@@ -187,42 +187,41 @@ export default function App() {
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-  // Supabase: Alle Bänke laden (zwei getrennte Abfragen statt JOIN, vermeidet Timeout)
+  // Supabase: Alle Bänke laden (parallel, ohne JOIN)
   const fetchBenches = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
     try {
-      // Schritt 1: Nur Bänke laden (ohne JOIN)
-      const { data: benchData, error: benchError } = await supabase
-        .from("benches")
-        .select("id, title, description, lat, lng, photo_url, user_name, created_at")
-        .order("created_at", { ascending: false });
+      // Beide Abfragen gleichzeitig starten
+      const [benchResult, commentResult] = await Promise.all([
+        supabase
+          .from("benches")
+          .select("id, title, description, lat, lng, photo_url, user_name, created_at")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("comments")
+          .select("id, bench_id, user_name, text, rating, created_at"),
+      ]);
 
-      if (benchError) {
-        console.error("Fehler beim Laden der Bänke:", benchError);
-        setFetchError(`Fehler beim Laden der Bänke: ${benchError.message}`);
+      if (benchResult.error) {
+        console.error("Fehler beim Laden der Bänke:", benchResult.error);
+        setFetchError(`Fehler beim Laden der Bänke: ${benchResult.error.message}`);
         setLoading(false);
         return;
       }
 
-      // Schritt 2: Kommentare separat laden
-      const { data: commentData, error: commentError } = await supabase
-        .from("comments")
-        .select("id, bench_id, user_name, text, rating, created_at");
-
-      if (commentError) {
-        console.error("Fehler beim Laden der Kommentare:", commentError);
-        // Bänke trotzdem anzeigen, nur ohne Kommentare
+      if (commentResult.error) {
+        console.error("Fehler beim Laden der Kommentare:", commentResult.error);
       }
 
       // Kommentare nach bench_id gruppieren
       const commentsByBench = {};
-      for (const c of (commentData || [])) {
+      for (const c of (commentResult.data || [])) {
         if (!commentsByBench[c.bench_id]) commentsByBench[c.bench_id] = [];
         commentsByBench[c.bench_id].push(c);
       }
 
-      setBenches((benchData || []).map(b => {
+      setBenches((benchResult.data || []).map(b => {
         const bc = commentsByBench[b.id] || [];
         return {
           id: b.id,
