@@ -221,21 +221,24 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("benches")
-        .select("id, title, description, lat, lng, user_name, created_at, photo_url")
+        .select("id, title, description, lat, lng, user_name, created_at, photo_url, comments(rating, text)")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      setBenches(data.map(b => ({
-        id: b.id, lat: b.lat, lng: b.lng,
-        title: b.title,
-        description: b.description || "",
-        photo: b.photo_url || null,
-        user: b.user_name,
-        date: new Date(b.created_at).toISOString().split("T")[0],
-        ratings: [],
-        comments: [],
-      })));
+      setBenches(data.map(b => {
+        const cms = b.comments || [];
+        return {
+          id: b.id, lat: b.lat, lng: b.lng,
+          title: b.title,
+          description: b.description || "",
+          photo: b.photo_url || null,
+          user: b.user_name,
+          date: new Date(b.created_at).toISOString().split("T")[0],
+          ratings: cms.map(c => c.rating),
+          comments: cms.filter(c => c.text),
+        };
+      }));
     } catch (e) {
       console.error("Fehler beim Laden:", e);
       setFetchError(`Fehler beim Laden der Bänke: ${e.message}`);
