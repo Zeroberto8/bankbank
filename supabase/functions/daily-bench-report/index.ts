@@ -79,6 +79,7 @@ Deno.serve(async (req) => {
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "Europe/Berlin",
     });
 
     // E-Mail-HTML erstellen
@@ -102,6 +103,7 @@ Deno.serve(async (req) => {
         const time = new Date(b.created_at).toLocaleTimeString("de-DE", {
           hour: "2-digit",
           minute: "2-digit",
+          timeZone: "Europe/Berlin",
         });
 
         benchListHtml += `
