@@ -163,6 +163,31 @@ export default function App() {
     return () => window.removeEventListener("hashchange", checkHash);
   }, []);
 
+  // Smartphone-/Browser-Zurück-Taste: zwischen Views navigieren statt App zu schließen
+  const popNavigatingRef = useRef(false);
+  useEffect(() => {
+    const onPop = (e) => {
+      popNavigatingRef.current = true;
+      const target = e.state?.view || "map";
+      setView(target);
+      if (target !== "detail") setSel(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // Bei jedem View-Wechsel (außer bei Zurück-Taste) einen History-Eintrag pushen,
+  // damit die Zurück-Taste danach wieder zum vorherigen View führt
+  useEffect(() => {
+    if (popNavigatingRef.current) {
+      popNavigatingRef.current = false;
+      return;
+    }
+    if (view === "map") return; // Start-View, kein Push nötig
+    if (window.history.state?.view === view) return; // keine Duplikate
+    window.history.pushState({ view }, "");
+  }, [view]);
+
   // Map state
   const [cLng, setCLng] = useState(10.4);
   const [cLat, setCLat] = useState(51.2);
