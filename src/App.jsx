@@ -646,7 +646,7 @@ export default function App() {
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 11, opacity: .7 }}>📍 von {sel.user} · {sel.date}</p>
           </div>
-          {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: 180, objectFit: "cover", borderRadius: 16 }} /></div>}
+          {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: "auto", display: "block", borderRadius: 16 }} /></div>}
           <div style={{ padding: 16 }}>
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
               <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
