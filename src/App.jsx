@@ -614,7 +614,6 @@ export default function App() {
       {view === "detail" && sel && (
         <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
           <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "20px 16px 28px" }}>
-            <button onClick={() => { setView("map"); setSel(null); }} style={bk}>← Zurück</button>
             <h2 style={{ margin: 0, fontSize: 20 }}>{sel.title}</h2>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, opacity: .9 }}>
               <Stars rating={Math.round(parseFloat(avg(sel.ratings)))} size={18} />
@@ -628,6 +627,7 @@ export default function App() {
               <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
               <p style={{ margin: 0, fontSize: 13, color: T.mut, lineHeight: 1.5 }}>{sel.description}</p>
             </div>
+            <button onClick={() => { setView("map"); setSel(null); }} style={{ display: "block", width: "100%", padding: "12px 16px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>← Zurück zur Karte</button>
             {detailLoading && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16 }}>
                 <div style={{ width: 16, height: 16, border: `2px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
