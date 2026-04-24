@@ -221,7 +221,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("benches")
-        .select("id, title, description, lat, lng, user_name, created_at")
+        .select("id, title, description, lat, lng, user_name, created_at, photo_url")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -230,7 +230,7 @@ export default function App() {
         id: b.id, lat: b.lat, lng: b.lng,
         title: b.title,
         description: b.description || "",
-        photo: null,
+        photo: b.photo_url || null,
         user: b.user_name,
         date: new Date(b.created_at).toISOString().split("T")[0],
         ratings: [],
@@ -694,13 +694,16 @@ export default function App() {
           }).map(b => {
             const d = userPos ? dist(userPos.lat, userPos.lng, b.lat, b.lng) : null;
             return (
-              <div key={b.id} onClick={() => { selectBench(b); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
-                  {d !== null && <span style={{ fontSize: 11, color: T.pri, fontWeight: 600, whiteSpace: "nowrap", marginLeft: 8 }}>📍 {fmtDist(d)}</span>}
+              <div key={b.id} onClick={() => { selectBench(b); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer", display: "flex", gap: 12 }}>
+                {b.photo && <img src={b.photo} alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10, flexShrink: 0 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
+                    {d !== null && <span style={{ fontSize: 11, color: T.pri, fontWeight: 600, whiteSpace: "nowrap", marginLeft: 8 }}>📍 {fmtDist(d)}</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}><Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={12} /><span style={{ fontSize: 11, color: T.mut }}>{avg(b.ratings)} · {b.comments.length} Kommentare</span></div>
+                  <p style={{ margin: 0, fontSize: 12, color: T.mut }}>{b.description}</p>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}><Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={12} /><span style={{ fontSize: 11, color: T.mut }}>{avg(b.ratings)} · {b.comments.length} Kommentare</span></div>
-                <p style={{ margin: 0, fontSize: 12, color: T.mut }}>{b.description}</p>
               </div>
             );
           })}
@@ -817,8 +820,9 @@ export default function App() {
           {benches.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke vorhanden</p>}
           {benches.map(b => (
             <div key={b.id} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                {b.photo && <img src={b.photo} alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10, flexShrink: 0 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
                     <Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={11} />
