@@ -29,8 +29,26 @@ Deno.serve(async (req) => {
     // Supabase-Client mit Service-Role-Key (darf alles lesen)
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Bänke der letzten 24 Stunden abfragen
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Zeitfenster: genau 24 Stunden, verankert am Cron-Zeitpunkt (18:00 UTC täglich).
+    // Vorheriger Ansatz war ein rollendes "Date.now() - 24h" - das fiel bei kleinsten
+    // Cron-Verzögerungen aus dem Fenster und führte beim Test-Button dazu, dass
+    // Bänke, die länger als 24h her sind, grundsätzlich fehlten => immer 0.
+    const CRON_HOUR_UTC = 18;
+    const now = new Date();
+    const lastCron = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      CRON_HOUR_UTC, 0, 0, 0,
+    ));
+    // Wenn heutiger Cron-Zeitpunkt noch nicht erreicht ist, nimm den von gestern
+    if (lastCron > now) {
+      lastCron.setUTCDate(lastCron.getUTCDate() - 1);
+    }
+    // Fensterstart = 24h vor dem letzten Cron-Lauf
+    const since = new Date(lastCron.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+    console.log(`[daily-bench-report] now=${now.toISOString()} since=${since} lastCron=${lastCron.toISOString()}`);
 
     const { data: newBenches, error } = await supabase
       .from("benches")
@@ -38,7 +56,12 @@ Deno.serve(async (req) => {
       .gte("created_at", since)
       .order("created_at", { ascending: false });
 
+    if (!error) {
+      console.log(`[daily-bench-report] benches found: ${newBenches?.length ?? 0}`);
+    }
+
     if (error) {
+      console.error("[daily-bench-report] DB error:", error);
       return new Response(
         JSON.stringify({ error: "DB-Fehler", details: error.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
