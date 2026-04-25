@@ -542,6 +542,33 @@ export default function App() {
 
   const filtered = benches.filter(b => b.title.toLowerCase().includes(search.toLowerCase()) || b.description.toLowerCase().includes(search.toLowerCase()));
 
+  // Sortierte Liste (nach Distanz, falls GPS-Position vorhanden) – wird in Listenansicht
+  // und für die Swipe-Navigation in der Detailansicht verwendet
+  const sortedList = useMemo(() => {
+    const arr = [...filtered];
+    if (userPos) arr.sort((a, b) => dist(userPos.lat, userPos.lng, a.lat, a.lng) - dist(userPos.lat, userPos.lng, b.lat, b.lng));
+    return arr;
+  }, [filtered, userPos]);
+
+  // Swipe in Detailansicht: links = nächste Bank, rechts = vorherige Bank
+  const swipeRef = useRef(null);
+  const onDetailTouchStart = (e) => {
+    const t = e.touches[0];
+    swipeRef.current = { sx: t.clientX, sy: t.clientY };
+  };
+  const onDetailTouchEnd = (e) => {
+    if (!swipeRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeRef.current.sx;
+    const dy = t.clientY - swipeRef.current.sy;
+    swipeRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const idx = sortedList.findIndex(b => b.id === sel?.id);
+    if (idx === -1) return;
+    const target = dx < 0 ? sortedList[idx + 1] : sortedList[idx - 1];
+    if (target) selectBench(target);
+  };
+
   const inp = { width: "100%", padding: 12, borderRadius: 12, border: `2px solid ${T.brd}`, fontSize: 14, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", boxSizing: "border-box" };
   const bk = { background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 20, fontSize: 13, fontFamily: "system-ui", cursor: "pointer", marginBottom: 14 };
 
@@ -637,7 +664,7 @@ export default function App() {
 
       {/* === DETAIL VIEW === */}
       {view === "detail" && sel && (
-        <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
+        <div onTouchStart={onDetailTouchStart} onTouchEnd={onDetailTouchEnd} style={{ flex: 1, overflow: "auto", background: T.bg }}>
           <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "20px 16px 28px" }}>
             <h2 style={{ margin: 0, fontSize: 20 }}>{sel.title}</h2>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, opacity: .9 }}>
@@ -716,10 +743,7 @@ export default function App() {
           {loading && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 40 }}><div style={{ width: 28, height: 28, border: `3px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} /><p style={{ margin: 0, fontSize: 14, color: T.mut }}>Bänke werden geladen...</p></div>}
           {fetchError && <div style={{ textAlign: "center", padding: 40 }}><p style={{ fontSize: 14, color: "#dc3545", fontWeight: 600 }}>{fetchError}</p><button onClick={fetchBenches} style={{ marginTop: 8, padding: "8px 20px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Erneut versuchen</button></div>}
           {!loading && !fetchError && filtered.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke gefunden 🪑</p>}
-          {[...filtered].sort((a, b) => {
-            if (!userPos) return 0;
-            return dist(userPos.lat, userPos.lng, a.lat, a.lng) - dist(userPos.lat, userPos.lng, b.lat, b.lng);
-          }).map(b => {
+          {sortedList.map(b => {
             const d = userPos ? dist(userPos.lat, userPos.lng, b.lat, b.lng) : null;
             return (
               <div key={b.id} onClick={() => { selectBench(b); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer", display: "flex", gap: 12 }}>
