@@ -697,11 +697,11 @@ export default function App() {
           </div>
           {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: "auto", display: "block", borderRadius: 16 }} /></div>}
           <div style={{ padding: 16 }}>
+            <button onClick={() => { setCLat(sel.lat); setCLng(sel.lng); setZoom(17); setView("map"); setSel(null); }} style={{ display: "block", width: "100%", padding: "12px 16px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>📍 Zeige in der Karte</button>
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
               <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
               <p style={{ margin: 0, fontSize: 13, color: T.mut, lineHeight: 1.5 }}>{sel.description}</p>
             </div>
-            <button onClick={() => { setCLat(sel.lat); setCLng(sel.lng); setZoom(17); setView("map"); setSel(null); }} style={{ display: "block", width: "100%", padding: "12px 16px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>📍 Zeige in der Karte</button>
             {detailLoading && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16 }}>
                 <div style={{ width: 16, height: 16, border: `2px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
