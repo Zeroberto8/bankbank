@@ -672,6 +672,28 @@ export default function App() {
               <span style={{ fontSize: 13 }}>{avg(sel.ratings)} · {sel.ratings.length} Bewertungen</span>
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 11, opacity: .7 }}>📍 von {sel.user} · {sel.date}</p>
+            {(() => {
+              const idx = sortedList.findIndex(b => b.id === sel.id);
+              const total = sortedList.length;
+              if (idx === -1 || total <= 1) return null;
+              const prev = idx > 0 ? sortedList[idx - 1] : null;
+              const next = idx < total - 1 ? sortedList[idx + 1] : null;
+              return (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, padding: "4px 6px", background: "rgba(255,255,255,.15)", borderRadius: 20 }}>
+                  <button
+                    onClick={() => prev && selectBench(prev)}
+                    disabled={!prev}
+                    style={{ background: "none", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, cursor: prev ? "pointer" : "default", opacity: prev ? 1 : .35, padding: "4px 10px" }}
+                  >◀ Vorherige</button>
+                  <span style={{ fontSize: 12, opacity: .9, fontWeight: 600 }}>{idx + 1} / {total}</span>
+                  <button
+                    onClick={() => next && selectBench(next)}
+                    disabled={!next}
+                    style={{ background: "none", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, cursor: next ? "pointer" : "default", opacity: next ? 1 : .35, padding: "4px 10px" }}
+                  >Nächste ▶</button>
+                </div>
+              );
+            })()}
           </div>
           {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: "auto", display: "block", borderRadius: 16 }} /></div>}
           <div style={{ padding: 16 }}>
