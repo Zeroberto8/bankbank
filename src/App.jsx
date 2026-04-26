@@ -252,7 +252,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("benches")
-        .select("id, title, description, lat, lng, user_name, created_at, photo_url, comments(rating, text)")
+        .select("id, title, description, lat, lng, user_name, created_at, photo_url, comments(id, user_name, rating, text, created_at)")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -267,7 +267,15 @@ export default function App() {
           user: b.user_name,
           date: new Date(b.created_at).toISOString().split("T")[0],
           ratings: cms.map(c => c.rating),
-          comments: cms.filter(c => c.text),
+          comments: cms
+            .filter(c => c.text)
+            .map(c => ({
+              id: c.id,
+              user: c.user_name,
+              text: c.text,
+              rating: c.rating,
+              date: new Date(c.created_at).toISOString().split("T")[0],
+            })),
         };
       }));
     } catch (e) {
@@ -979,6 +987,31 @@ export default function App() {
                 </div>
               </div>
               {b.description && <p style={{ margin: "6px 0 0", fontSize: 12, color: T.mut }}>{b.description}</p>}
+              {/* Bewertungen & Kommentare */}
+              <div style={{ marginTop: 10, padding: 10, background: T.bg, borderRadius: 10, border: `1px solid ${T.brd}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: T.txt }}>
+                    ⭐ {b.ratings.length} Bewertungen · 💬 {b.comments.length} Kommentare
+                  </span>
+                  <span style={{ fontSize: 11, color: T.mut }}>Ø {avg(b.ratings)}</span>
+                </div>
+                {b.comments.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {b.comments.map(c => (
+                      <div key={c.id} style={{ background: "#fff", borderRadius: 8, padding: 8, border: `1px solid ${T.brd}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                          <span style={{ fontWeight: 700, fontSize: 11 }}>{c.user}</span>
+                          <Stars rating={c.rating} size={10} />
+                        </div>
+                        <p style={{ margin: 0, fontSize: 11, color: T.mut, lineHeight: 1.4 }}>{c.text}</p>
+                        <span style={{ fontSize: 9, color: T.mut }}>{c.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 11, color: T.mut, fontStyle: "italic" }}>Keine Textkommentare</p>
+                )}
+              </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button onClick={() => { setEditBench(b); setEditTitle(b.title); setEditDesc(b.description || ""); }}
                   style={{ flex: 1, padding: 8, borderRadius: 10, border: `1px solid ${T.brd}`, background: "#fff", color: T.txt, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>✏️ Bearbeiten</button>
