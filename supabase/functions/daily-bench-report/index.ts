@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
 <body style="margin:0;padding:0;background:#F7F3ED;font-family:system-ui,-apple-system,sans-serif;">
   <div style="max-width:520px;margin:0 auto;padding:16px;">
     <!-- Header -->
-    <div style="background:linear-gradient(135deg,#2D5016,#4A7C28);border-radius:16px 16px 0 0;padding:24px;text-align:center;color:#fff;">
+    <div style="background:linear-gradient(135deg,#2D5016,#4A7C28);border-radius:16px 16px 0 0;padding:24px;text-align:center;color:#000;">
       <div style="font-size:36px;margin-bottom:8px;">🪑</div>
       <h1 style="margin:0;font-size:22px;font-weight:700;">BankBank Tagesbericht</h1>
       <p style="margin:6px 0 0;font-size:13px;opacity:.8;">${today}</p>
