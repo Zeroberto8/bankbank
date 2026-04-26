@@ -156,6 +156,8 @@ export default function App() {
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [emailSending, setEmailSending] = useState(false);
+  const [adminSort, setAdminSort] = useState("date"); // date | user | distance | rating
+  const [adminDetail, setAdminDetail] = useState(null); // gewählte Bank für Admin-Detailansicht
 
   // Hash-basierter Admin-Zugang: #admin in der URL öffnet das Admin-Panel
   useEffect(() => {
@@ -624,6 +626,22 @@ export default function App() {
     if (target) selectBench(target);
   };
 
+  // Sortierte Bank-Liste fürs Admin-Panel
+  const adminSortedBenches = useMemo(() => {
+    const arr = [...benches];
+    if (adminSort === "user") {
+      arr.sort((a, b) => (a.user || "").localeCompare(b.user || "", "de", { sensitivity: "base" }));
+    } else if (adminSort === "rating") {
+      arr.sort((a, b) => parseFloat(avg(b.ratings)) - parseFloat(avg(a.ratings)) || 0);
+    } else if (adminSort === "distance" && userPos) {
+      arr.sort((a, b) => dist(userPos.lat, userPos.lng, a.lat, a.lng) - dist(userPos.lat, userPos.lng, b.lat, b.lng));
+    } else {
+      // date (neueste zuerst)
+      arr.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    }
+    return arr;
+  }, [benches, adminSort, userPos]);
+
   const inp = { width: "100%", padding: 12, borderRadius: 12, border: `2px solid ${T.brd}`, fontSize: 14, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", boxSizing: "border-box" };
   const bk = { background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 20, fontSize: 13, fontFamily: "system-ui", cursor: "pointer", marginBottom: 14 };
 
@@ -750,7 +768,7 @@ export default function App() {
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 11, opacity: .7 }}>📍 von {sel.user} · {sel.date}</p>
           </div>
-          {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: "auto", display: "block", borderRadius: 16 }} /></div>}
+          {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: "auto", maxHeight: 420, objectFit: "cover", display: "block", borderRadius: 16 }} /></div>}
           <div style={{ padding: 16 }}>
             <button onClick={() => { setCLat(sel.lat); setCLng(sel.lng); setZoom(17); setView("map"); setSel(null); }} style={{ display: "block", width: "100%", padding: "12px 16px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>📍 Zeige in der Karte</button>
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
@@ -972,8 +990,76 @@ export default function App() {
             </div>
           )}
 
-          {benches.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke vorhanden</p>}
-          {benches.map(b => (
+          {/* Admin-Detailansicht (überlagert die Liste, wenn eine Bank gewählt ist) */}
+          {adminDetail && (() => {
+            const b = adminSortedBenches.find(x => x.id === adminDetail.id) || adminDetail;
+            const d = userPos ? dist(userPos.lat, userPos.lng, b.lat, b.lng) : null;
+            return (
+              <div style={{ margin: "12px 16px", background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}` }}>
+                <button onClick={() => setAdminDetail(null)}
+                  style={{ background: "rgba(0,0,0,.06)", border: "none", color: T.txt, padding: "6px 14px", borderRadius: 16, fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>
+                  ← Zurück zur Liste
+                </button>
+                {b.photo && (
+                  <img src={b.photo} alt="" style={{ width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 14, display: "block", marginBottom: 12 }} />
+                )}
+                <h2 style={{ margin: "0 0 6px", fontSize: 20 }}>{b.title}</h2>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={18} />
+                  <span style={{ fontSize: 13, color: T.mut }}>Ø {avg(b.ratings)} · {b.ratings.length} Bewertungen</span>
+                </div>
+                <p style={{ margin: "0 0 8px", fontSize: 12, color: T.mut }}>
+                  📍 von {b.user} · {b.date} · {b.lat.toFixed(4)}, {b.lng.toFixed(4)}
+                  {d !== null && <> · 📏 {fmtDist(d)}</>}
+                </p>
+                {b.description && (
+                  <div style={{ background: T.bg, borderRadius: 10, padding: 12, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
+                    <p style={{ margin: 0, fontSize: 13, color: T.txt, lineHeight: 1.5 }}>{b.description}</p>
+                  </div>
+                )}
+                <h3 style={{ margin: "8px 0", fontSize: 14 }}>💬 Kommentare ({b.comments.length})</h3>
+                {b.comments.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {b.comments.map(c => (
+                      <div key={c.id} style={{ background: T.bg, borderRadius: 10, padding: 10, border: `1px solid ${T.brd}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontWeight: 700, fontSize: 12 }}>{c.user}</span>
+                          <Stars rating={c.rating} size={11} />
+                        </div>
+                        <p style={{ margin: 0, fontSize: 12, color: T.txt, lineHeight: 1.4 }}>{c.text}</p>
+                        <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 12, color: T.mut, fontStyle: "italic" }}>Noch keine Textkommentare</p>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <button onClick={() => { setEditBench(b); setEditTitle(b.title); setEditDesc(b.description || ""); }}
+                    style={{ flex: 1, padding: 10, borderRadius: 12, border: `1px solid ${T.brd}`, background: "#fff", color: T.txt, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>✏️ Bearbeiten</button>
+                  <button onClick={() => { if (confirm(`"${b.title}" wirklich löschen?`)) { deleteBench(b.id); setAdminDetail(null); } }}
+                    style={{ flex: 1, padding: 10, borderRadius: 12, border: "none", background: "#dc3545", color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>🗑️ Löschen</button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Sortierung */}
+          {!adminDetail && (
+            <div style={{ margin: "12px 16px", background: "#fff", borderRadius: 14, padding: 12, border: `1px solid ${T.brd}`, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: T.mut }}>Sortieren nach:</span>
+              <select value={adminSort} onChange={e => setAdminSort(e.target.value)}
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 13, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", cursor: "pointer" }}>
+                <option value="date">📅 Eintragungsdatum (neueste zuerst)</option>
+                <option value="user">👤 Nutzername (A–Z)</option>
+                <option value="distance" disabled={!userPos}>📏 Entfernung{!userPos ? " (kein Standort)" : ""}</option>
+                <option value="rating">⭐ Bewertung (höchste zuerst)</option>
+              </select>
+            </div>
+          )}
+
+          {!adminDetail && benches.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke vorhanden</p>}
+          {!adminDetail && adminSortedBenches.map(b => (
             <div key={b.id} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}` }}>
               <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                 {b.photo && <img src={b.photo} alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10, flexShrink: 0 }} />}
@@ -1013,6 +1099,8 @@ export default function App() {
                 )}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button onClick={() => setAdminDetail(b)}
+                  style={{ flex: 1, padding: 8, borderRadius: 10, border: `1px solid ${T.brd}`, background: T.pri, color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>🔍 Details</button>
                 <button onClick={() => { setEditBench(b); setEditTitle(b.title); setEditDesc(b.description || ""); }}
                   style={{ flex: 1, padding: 8, borderRadius: 10, border: `1px solid ${T.brd}`, background: "#fff", color: T.txt, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>✏️ Bearbeiten</button>
                 <button onClick={() => { if (confirm(`"${b.title}" wirklich löschen?`)) deleteBench(b.id); }}
