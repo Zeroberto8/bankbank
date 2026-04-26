@@ -954,7 +954,7 @@ export default function App() {
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error || "Unbekannter Fehler");
-                    flash(`📧 E-Mail gesendet! (${data.benchesCount || 0} neue Bänke)`);
+                    flash(`📧 E-Mail gesendet! (${data.benchesCount || 0} Bänke, ${data.newCommentsCount || 0} Kommentare)`);
                   } catch (e) {
                     flash("❌ Fehler: " + e.message);
                     console.error("E-Mail Fehler:", e);

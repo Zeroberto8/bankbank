@@ -29,27 +29,19 @@ Deno.serve(async (req) => {
     // Supabase-Client mit Service-Role-Key (darf alles lesen)
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Zeitfenster: genau 24 Stunden, verankert am Cron-Zeitpunkt (18:00 UTC täglich).
-    // Vorheriger Ansatz war ein rollendes "Date.now() - 24h" - das fiel bei kleinsten
-    // Cron-Verzögerungen aus dem Fenster und führte beim Test-Button dazu, dass
-    // Bänke, die länger als 24h her sind, grundsätzlich fehlten => immer 0.
-    const CRON_HOUR_UTC = 18;
+    // Zeitfenster: rollende letzte 30 Stunden ab jetzt.
+    // 30h statt 24h, damit:
+    //  - der Cron-Lauf um 18:00 UTC selbst bei kleinen Verzögerungen den vorigen
+    //    Tag noch komplett abdeckt
+    //  - der Test-Button auch dann Treffer liefert, wenn er vor dem nächsten
+    //    geplanten Cron-Lauf gedrückt wird (vorheriger Anker-Ansatz schaute
+    //    sonst auf vorgestern→gestern und ließ heutige Bänke ausfallen).
     const now = new Date();
-    const lastCron = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate(),
-      CRON_HOUR_UTC, 0, 0, 0,
-    ));
-    // Wenn heutiger Cron-Zeitpunkt noch nicht erreicht ist, nimm den von gestern
-    if (lastCron > now) {
-      lastCron.setUTCDate(lastCron.getUTCDate() - 1);
-    }
-    // Fensterstart = 24h vor dem letzten Cron-Lauf
-    const since = new Date(lastCron.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const since = new Date(now.getTime() - 30 * 60 * 60 * 1000).toISOString();
 
-    console.log(`[daily-bench-report] now=${now.toISOString()} since=${since} lastCron=${lastCron.toISOString()}`);
+    console.log(`[daily-bench-report] now=${now.toISOString()} since=${since}`);
 
+    // 1) Neue Bänke im Zeitfenster (mit allen ihren Kommentaren)
     const { data: newBenches, error } = await supabase
       .from("benches")
       .select("*, comments(*)")
@@ -67,6 +59,40 @@ Deno.serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // 2) Neue Kommentare/Bewertungen im Zeitfenster
+    //    -> nur die zu BESTEHENDEN Bänken zeigen, damit es keine Doppelung
+    //       mit den unter (1) gelisteten neuen Bänken gibt.
+    const newBenchIds = new Set((newBenches || []).map((b: any) => b.id));
+    const { data: recentComments, error: cErr } = await supabase
+      .from("comments")
+      .select("id, bench_id, user_name, rating, text, created_at, benches(title)")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false });
+
+    if (cErr) {
+      console.error("[daily-bench-report] comments DB error:", cErr);
+    }
+
+    const otherComments = (recentComments || []).filter(
+      (c: any) => !newBenchIds.has(c.bench_id),
+    );
+
+    // Gruppieren nach Bank
+    const grouped: Record<string, { title: string; items: any[] }> = {};
+    for (const c of otherComments) {
+      const key = String(c.bench_id);
+      if (!grouped[key]) {
+        grouped[key] = {
+          title: c.benches?.title || `Bank #${c.bench_id}`,
+          items: [],
+        };
+      }
+      grouped[key].items.push(c);
+    }
+    const groupedList = Object.values(grouped);
+    const newCommentsCount = otherComments.length;
+    console.log(`[daily-bench-report] new comments/ratings on existing benches: ${newCommentsCount}`);
 
     // Gesamtzahl aller Bänke
     const { count: totalCount } = await supabase
@@ -86,9 +112,9 @@ Deno.serve(async (req) => {
     let benchListHtml = "";
     if (count === 0) {
       benchListHtml = `
-        <div style="text-align:center;padding:32px 16px;color:#8C7E6A;">
-          <div style="font-size:48px;margin-bottom:12px;">🪑</div>
-          <p style="font-size:15px;margin:0;">Heute wurden keine neuen Bänke eingetragen.</p>
+        <div style="text-align:center;padding:24px 16px;color:#8C7E6A;">
+          <div style="font-size:40px;margin-bottom:8px;">🪑</div>
+          <p style="font-size:14px;margin:0;">Keine neuen Bänke in den letzten 24h.</p>
         </div>`;
     } else {
       for (const b of newBenches!) {
@@ -119,6 +145,44 @@ Deno.serve(async (req) => {
       }
     }
 
+    // HTML-Block: neue Kommentare/Bewertungen zu bestehenden Bänken
+    let commentsHtml = "";
+    if (newCommentsCount === 0) {
+      commentsHtml = `
+        <div style="text-align:center;padding:18px 16px;color:#8C7E6A;">
+          <p style="font-size:13px;margin:0;">Keine neuen Kommentare oder Bewertungen.</p>
+        </div>`;
+    } else {
+      for (const g of groupedList) {
+        let itemsHtml = "";
+        for (const c of g.items) {
+          const stars = "★".repeat(c.rating) + "☆".repeat(5 - c.rating);
+          const time = new Date(c.created_at).toLocaleString("de-DE", {
+            day: "2-digit",
+            month: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "Europe/Berlin",
+          });
+          itemsHtml += `
+            <div style="background:#F7F3ED;border-radius:8px;padding:10px;margin-top:8px;border:1px solid #E8E0D4;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <span style="font-weight:700;font-size:12px;color:#2C2416;">${c.user_name || "Anonym"}</span>
+                <span style="font-size:12px;color:#E8A838;">${stars}</span>
+              </div>
+              ${c.text ? `<p style="margin:0;font-size:12px;color:#2C2416;line-height:1.4;">${c.text}</p>` : `<p style="margin:0;font-size:12px;color:#8C7E6A;font-style:italic;">Bewertung ohne Kommentar</p>`}
+              <span style="font-size:10px;color:#8C7E6A;">${time}</span>
+            </div>`;
+        }
+        commentsHtml += `
+          <div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #E8E0D4;">
+            <h3 style="margin:0 0 4px;font-size:14px;color:#2C2416;">💬 ${g.title}</h3>
+            <p style="margin:0;font-size:11px;color:#8C7E6A;">${g.items.length} ${g.items.length === 1 ? "neuer Eintrag" : "neue Einträge"}</p>
+            ${itemsHtml}
+          </div>`;
+      }
+    }
+
     const emailHtml = `
 <!DOCTYPE html>
 <html lang="de">
@@ -136,23 +200,32 @@ Deno.serve(async (req) => {
     <div style="background:#fff;padding:20px 24px;border-left:1px solid #E8E0D4;border-right:1px solid #E8E0D4;">
       <div style="display:flex;text-align:center;">
         <div style="flex:1;">
-          <div style="font-size:28px;font-weight:700;color:#4A7C28;">${count}</div>
-          <div style="font-size:11px;color:#8C7E6A;margin-top:2px;">Neue Bänke heute</div>
+          <div style="font-size:24px;font-weight:700;color:#4A7C28;">${count}</div>
+          <div style="font-size:11px;color:#8C7E6A;margin-top:2px;">Neue Bänke</div>
         </div>
-        <div style="width:1px;background:#E8E0D4;margin:0 16px;"></div>
+        <div style="width:1px;background:#E8E0D4;margin:0 12px;"></div>
         <div style="flex:1;">
-          <div style="font-size:28px;font-weight:700;color:#E8A838;">${totalCount || "?"}</div>
+          <div style="font-size:24px;font-weight:700;color:#4A7C28;">${newCommentsCount}</div>
+          <div style="font-size:11px;color:#8C7E6A;margin-top:2px;">Neue Kommentare/Bewertungen</div>
+        </div>
+        <div style="width:1px;background:#E8E0D4;margin:0 12px;"></div>
+        <div style="flex:1;">
+          <div style="font-size:24px;font-weight:700;color:#E8A838;">${totalCount || "?"}</div>
           <div style="font-size:11px;color:#8C7E6A;margin-top:2px;">Bänke gesamt</div>
         </div>
       </div>
     </div>
 
-    <!-- Liste -->
+    <!-- Neue Bänke -->
     <div style="background:#F7F3ED;padding:16px;border-left:1px solid #E8E0D4;border-right:1px solid #E8E0D4;">
-      <h2 style="margin:0 0 12px;font-size:15px;color:#2C2416;">
-        ${count > 0 ? `Neue Bänke (letzte 24h)` : "Aktivität"}
-      </h2>
+      <h2 style="margin:0 0 12px;font-size:15px;color:#2C2416;">🪑 Neue Bänke (letzte 24h)</h2>
       ${benchListHtml}
+    </div>
+
+    <!-- Neue Kommentare/Bewertungen zu bestehenden Bänken -->
+    <div style="background:#F7F3ED;padding:0 16px 16px;border-left:1px solid #E8E0D4;border-right:1px solid #E8E0D4;">
+      <h2 style="margin:0 0 12px;font-size:15px;color:#2C2416;">💬 Neue Kommentare &amp; Bewertungen</h2>
+      ${commentsHtml}
     </div>
 
     <!-- Footer -->
@@ -175,7 +248,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: "BankBank <onboarding@resend.dev>",
         to: [notificationEmail],
-        subject: `🪑 BankBank: ${count} neue ${count === 1 ? "Bank" : "Bänke"} am ${today}`,
+        subject: `🪑 BankBank: ${count} neue ${count === 1 ? "Bank" : "Bänke"}, ${newCommentsCount} ${newCommentsCount === 1 ? "Kommentar/Bewertung" : "Kommentare/Bewertungen"} am ${today}`,
         html: emailHtml,
       }),
     });
@@ -193,6 +266,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         benchesCount: count,
+        newCommentsCount,
         totalBenches: totalCount,
         emailId: resendData.id,
       }),
