@@ -1001,7 +1001,20 @@ export default function App() {
                   ← Zurück zur Liste
                 </button>
                 {b.photo && (
-                  <img src={b.photo} alt="" style={{ width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 14, display: "block", marginBottom: 12 }} />
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                    <img
+                      src={b.photo}
+                      alt=""
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: 320,
+                        width: "auto",
+                        height: "auto",
+                        borderRadius: 14,
+                        background: T.bg,
+                      }}
+                    />
+                  </div>
                 )}
                 <h2 style={{ margin: "0 0 6px", fontSize: 20 }}>{b.title}</h2>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
