@@ -141,6 +141,12 @@ export default function App() {
   const [userPos, setUserPos] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  // Review (Kommentar+Bewertung zu bestehender Bank)
+  const [revRating, setRevRating] = useState(0);
+  const [revText, setRevText] = useState("");
+  const [revUser, setRevUser] = useState(() => localStorage.getItem("bankbank_user") || "");
+  const [revSubmitting, setRevSubmitting] = useState(false);
+  const revSubmittingRef = useRef(false);
   // Admin state
   const [adminAuth, setAdminAuth] = useState(false);
   const [adminUser, setAdminUser] = useState("");
@@ -506,6 +512,47 @@ export default function App() {
     }
   };
 
+  // Bewertung/Kommentar zu bestehender Bank hinzufügen
+  const addReview = async () => {
+    if (revSubmittingRef.current) return;
+    if (!sel || !revUser.trim() || !revRating) return;
+
+    if (containsBadWords(revUser) || containsBadWords(revText)) {
+      flash("⚠️ Dein Kommentar enthält unangemessene Begriffe und kann nicht gespeichert werden.");
+      return;
+    }
+
+    revSubmittingRef.current = true;
+    setRevSubmitting(true);
+    try {
+      const { error } = await supabase.from("comments").insert({
+        bench_id: sel.id,
+        user_name: revUser.trim(),
+        rating: revRating,
+        text: revText.trim() || null,
+      });
+      if (error) {
+        console.error("Fehler beim Speichern der Bewertung:", error);
+        flash("Fehler beim Speichern!");
+        return;
+      }
+      localStorage.setItem("bankbank_user", revUser.trim());
+      setRevRating(0);
+      setRevText("");
+      flash("⭐ Bewertung gespeichert!");
+      // Detail neu laden, damit Mittelwert + Liste aktuell sind
+      await fetchCommentsFor(sel);
+      // Marker-Liste auch aktualisieren (Mittelwert in Karte/Liste)
+      fetchBenches();
+    } catch (e) {
+      console.error("Fehler:", e);
+      flash("Fehler beim Speichern!");
+    } finally {
+      revSubmittingRef.current = false;
+      setRevSubmitting(false);
+    }
+  };
+
   // Admin: Bank löschen
   const deleteBench = async (id) => {
     const { error } = await supabase.from("benches").delete().eq("id", id);
@@ -701,6 +748,32 @@ export default function App() {
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
               <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
               <p style={{ margin: 0, fontSize: 13, color: T.mut, lineHeight: 1.5 }}>{sel.description}</p>
+            </div>
+            {/* Bewertung & Kommentar abgeben */}
+            <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
+              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Bewertung abgeben</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Dein Name *</label>
+                  <input type="text" placeholder="z.B. Anna M." value={revUser} onChange={e => setRevUser(e.target.value)} style={inp} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Bewertung *</label>
+                  <Stars rating={revRating} size={28} interactive onRate={setRevRating} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Kommentar (optional)</label>
+                  <textarea placeholder="Dein Eindruck von dieser Bank..." value={revText} onChange={e => setRevText(e.target.value)} style={{ ...inp, minHeight: 70, resize: "vertical" }} />
+                </div>
+                <button
+                  onClick={addReview}
+                  disabled={!revUser.trim() || !revRating || revSubmitting}
+                  style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: revSubmitting ? "not-allowed" : "pointer", opacity: (!revUser.trim() || !revRating || revSubmitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}
+                >
+                  {revSubmitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}
+                  {revSubmitting ? "Wird gespeichert..." : "Bewertung absenden ✓"}
+                </button>
+              </div>
             </div>
             {detailLoading && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16 }}>
