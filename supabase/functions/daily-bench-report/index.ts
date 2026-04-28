@@ -29,17 +29,44 @@ Deno.serve(async (req) => {
     // Supabase-Client mit Service-Role-Key (darf alles lesen)
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Zeitfenster: rollende letzte 30 Stunden ab jetzt.
-    // 30h statt 24h, damit:
-    //  - der Cron-Lauf um 18:00 UTC selbst bei kleinen Verzögerungen den vorigen
-    //    Tag noch komplett abdeckt
-    //  - der Test-Button auch dann Treffer liefert, wenn er vor dem nächsten
-    //    geplanten Cron-Lauf gedrückt wird (vorheriger Anker-Ansatz schaute
-    //    sonst auf vorgestern→gestern und ließ heutige Bänke ausfallen).
-    const now = new Date();
-    const since = new Date(now.getTime() - 30 * 60 * 60 * 1000).toISOString();
+    // Body parsen: { test: true } -> Test-Modus (Vorschau, kein State-Update)
+    let isTestMode = false;
+    try {
+      const body = await req.json();
+      isTestMode = body?.test === true;
+    } catch {
+      // leerer / kein JSON-Body -> Cron-Modus
+    }
 
-    console.log(`[daily-bench-report] now=${now.toISOString()} since=${since}`);
+    // Zeitfenster bestimmen.
+    //  - Cron-Modus: ab dem letzten erfolgreich versendeten Cron-Mail. Damit
+    //    werden auch Bänke gemeldet, die nach dem letzten Cron, aber vor dem
+    //    aktuellen entstanden sind. Keine Lücken, keine fragile 30h-Heuristik.
+    //    Fallback (Tabelle leer / Fehler): 48h zurück, damit der erste Lauf
+    //    nicht völlig leer bleibt.
+    //  - Test-Modus: rollendes 30h-Fenster ab jetzt, damit der Test-Button
+    //    jederzeit eine sinnvolle Vorschau liefert, ohne den persistenten
+    //    "letzten Lauf"-Zeitstempel zu verändern.
+    const now = new Date();
+    let since: string;
+    if (isTestMode) {
+      since = new Date(now.getTime() - 30 * 60 * 60 * 1000).toISOString();
+    } else {
+      const { data: lastRun, error: lastRunErr } = await supabase
+        .from("email_runs")
+        .select("sent_at")
+        .order("sent_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastRunErr) {
+        console.error("[daily-bench-report] last-run query failed:", lastRunErr);
+      }
+      since = lastRun?.sent_at
+        ? new Date(lastRun.sent_at).toISOString()
+        : new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+    }
+
+    console.log(`[daily-bench-report] mode=${isTestMode ? "test" : "cron"} now=${now.toISOString()} since=${since}`);
 
     // 1) Neue Bänke im Zeitfenster (mit allen ihren Kommentaren)
     const { data: newBenches, error } = await supabase
@@ -114,7 +141,7 @@ Deno.serve(async (req) => {
       benchListHtml = `
         <div style="text-align:center;padding:24px 16px;color:#8C7E6A;">
           <div style="font-size:40px;margin-bottom:8px;">🪑</div>
-          <p style="font-size:14px;margin:0;">Keine neuen Bänke in den letzten 24h.</p>
+          <p style="font-size:14px;margin:0;">Keine neuen Bänke seit dem letzten Bericht.</p>
         </div>`;
     } else {
       for (const b of newBenches!) {
@@ -218,7 +245,7 @@ Deno.serve(async (req) => {
 
     <!-- Neue Bänke -->
     <div style="background:#F7F3ED;padding:16px;border-left:1px solid #E8E0D4;border-right:1px solid #E8E0D4;">
-      <h2 style="margin:0 0 12px;font-size:15px;color:#2C2416;">🪑 Neue Bänke (letzte 24h)</h2>
+      <h2 style="margin:0 0 12px;font-size:15px;color:#2C2416;">🪑 Neue Bänke seit dem letzten Bericht</h2>
       ${benchListHtml}
     </div>
 
@@ -248,7 +275,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: "BankBank <onboarding@resend.dev>",
         to: [notificationEmail],
-        subject: `🪑 BankBank: ${count} neue ${count === 1 ? "Bank" : "Bänke"}, ${newCommentsCount} ${newCommentsCount === 1 ? "Kommentar/Bewertung" : "Kommentare/Bewertungen"} am ${today}`,
+        subject: `${isTestMode ? "[TEST] " : ""}🪑 BankBank: ${count} neue ${count === 1 ? "Bank" : "Bänke"}, ${newCommentsCount} ${newCommentsCount === 1 ? "Kommentar/Bewertung" : "Kommentare/Bewertungen"} am ${today}`,
         html: emailHtml,
       }),
     });
@@ -262,9 +289,26 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Nur im Cron-Modus: erfolgreichen Versand persistieren, damit der nächste
+    // Lauf von hier aus weiterzählen kann. Im Test-Modus bewusst NICHT, sonst
+    // würde ein Test-Klick den nächsten Cron-Bericht leeren.
+    if (!isTestMode) {
+      const { error: insertErr } = await supabase
+        .from("email_runs")
+        .insert({
+          sent_at: now.toISOString(),
+          benches_count: count,
+          comments_count: newCommentsCount,
+        });
+      if (insertErr) {
+        console.error("[daily-bench-report] email_runs insert failed:", insertErr);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
+        mode: isTestMode ? "test" : "cron",
         benchesCount: count,
         newCommentsCount,
         totalBenches: totalCount,

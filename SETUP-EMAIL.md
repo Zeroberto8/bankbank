@@ -34,7 +34,19 @@ supabase secrets set NOTIFICATION_EMAIL=ralf.kroell@gmx.de
 
 (SUPABASE_URL und SUPABASE_SERVICE_ROLE_KEY sind automatisch verfügbar)
 
-## 5. Täglichen Cron-Job einrichten
+## 5. Tabelle `email_runs` anlegen
+
+Die Funktion merkt sich den Zeitpunkt jedes erfolgreichen Cron-Versands, damit
+der nächste Lauf "alles seit dem letzten Bericht" melden kann. Einmalig im
+Supabase **SQL Editor** ausführen:
+
+```bash
+# Datei liegt im Repo unter supabase/email-runs.sql
+```
+
+Inhalt: siehe `supabase/email-runs.sql`.
+
+## 6. Täglichen Cron-Job einrichten
 
 Gehe im Supabase Dashboard zu **SQL Editor** und führe aus:
 
@@ -80,7 +92,7 @@ select cron.schedule(
 );
 ```
 
-## 6. Testen
+## 7. Testen
 
 Im Admin-Panel (`#admin`) gibt es den Button **"Test senden"**.
 Klicke darauf, um sofort eine Test-E-Mail auszulösen.

@@ -950,7 +950,7 @@ export default function App() {
                         "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
                         "Content-Type": "application/json",
                       },
-                      body: "{}",
+                      body: JSON.stringify({ test: true }),
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error || "Unbekannter Fehler");
