@@ -129,9 +129,9 @@ export default function MapView({ benches, onBenchClick, addMode, onMapClick }) 
         ref={mapRef}
       >
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
-          maxZoom={19}
+          url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+          attribution='Kartendaten: &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>, SRTM | Darstellung: &copy; <a href="https://opentopomap.org/">OpenTopoMap</a> (CC-BY-SA)'
+          maxZoom={17}
         />
 
         {benches.map((bench) => {

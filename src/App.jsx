@@ -374,7 +374,7 @@ export default function App() {
     e.preventDefault();
     setZoom(prev => {
       const n = prev + (e.deltaY > 0 ? -0.3 : 0.3);
-      return Math.max(4, Math.min(18, n));
+      return Math.max(4, Math.min(17, n));
     });
   };
 
@@ -399,7 +399,7 @@ export default function App() {
         const t1 = e.touches[0], t2 = e.touches[1];
         const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
         const scale = dist / touchRef.current.dist;
-        setZoom(Math.max(4, Math.min(18, touchRef.current.startZoom + Math.log2(scale))));
+        setZoom(Math.max(4, Math.min(17, touchRef.current.startZoom + Math.log2(scale))));
       }
     };
 
@@ -418,7 +418,7 @@ export default function App() {
 
   // Compute visible tiles
   const tiles = useMemo(() => {
-    const z = Math.max(0, Math.min(18, Math.round(zoom)));
+    const z = Math.max(0, Math.min(17, Math.round(zoom)));
     const numTiles = Math.pow(2, z);
     const tilePixelSize = worldSize / numTiles;
 
@@ -443,7 +443,7 @@ export default function App() {
         const sub = subs[(wtx + ty) % 3];
         result.push({
           key: `${z}/${wtx}/${ty}`,
-          url: `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${z}/${wtx}/${ty}@2x.png`,
+          url: `https://${sub}.tile.opentopomap.org/${z}/${wtx}/${ty}.png`,
           x: px, y: py, size: tilePixelSize,
         });
       }
@@ -731,7 +731,7 @@ export default function App() {
             <button onClick={() => setView("list")} style={{ ...btnStyle, background: "#fff", color: T.pri }}>📋</button>
           </div>
 
-          <div style={{ position: "absolute", bottom: 4, left: 4, fontSize: 8, color: "#666", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3, zIndex: 10 }}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenStreetMap</a> © <a href="https://carto.com/" target="_blank" rel="noreferrer" style={{ color: "#666" }}>CARTO</a></div>
+          <div style={{ position: "absolute", bottom: 4, left: 4, fontSize: 8, color: "#666", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3, zIndex: 10 }}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org/" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenTopoMap</a> (CC-BY-SA)</div>
         </div>
       )}
 
