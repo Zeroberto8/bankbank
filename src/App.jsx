@@ -659,6 +659,17 @@ export default function App() {
 
   const filtered = benches.filter(b => b.title.toLowerCase().includes(search.toLowerCase()) || b.description.toLowerCase().includes(search.toLowerCase()));
 
+  // Mögliche Dublette: nächste vorhandene Bank im Umkreis von 25 m zur neuen Position
+  const nearbyBench = useMemo(() => {
+    if (!newPos) return null;
+    let best = null, bestKm = Infinity;
+    for (const b of benches) {
+      const km = dist(newPos.lat, newPos.lng, b.lat, b.lng);
+      if (km < bestKm) { bestKm = km; best = b; }
+    }
+    return best && bestKm <= 0.025 ? { bench: best, meters: Math.round(bestKm * 1000) } : null;
+  }, [newPos, benches]);
+
   // Sortierte Liste (nach Distanz, falls GPS-Position vorhanden) – wird in Listenansicht
   // und für die Swipe-Navigation in der Detailansicht verwendet
   const sortedList = useMemo(() => {
@@ -915,6 +926,21 @@ export default function App() {
             {newPos && <p style={{ margin: "6px 0 0", fontSize: 12, opacity: .8 }}>📍 {newPos.lat.toFixed(4)}, {newPos.lng.toFixed(4)}</p>}
           </div>
           <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+            {nearbyBench && (
+              <div style={{ background: "#FFF8E6", border: "1px solid #E8A838", borderRadius: 12, padding: 12 }}>
+                <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 700, color: "#8a6400" }}>
+                  ⚠️ Hier gibt es vielleicht schon eine Bank
+                </p>
+                <p style={{ margin: "0 0 10px", fontSize: 12, color: "#8a6400", lineHeight: 1.4 }}>
+                  „{nearbyBench.bench.title}" liegt nur ca. {nearbyBench.meters} m entfernt. Ist es dieselbe Bank? Dann bewerte sie lieber, statt sie doppelt einzutragen.
+                </p>
+                <button
+                  onClick={() => { setView("map"); setNewPos(null); selectBench(nearbyBench.bench); }}
+                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "none", background: "#E8A838", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  ⭐ Diese Bank bewerten
+                </button>
+              </div>
+            )}
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Dein Name *</label>
               <input type="text" placeholder="z.B. Anna M." value={newUser} onChange={e => setNewUser(e.target.value)} style={inp} /></div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Name der Bank *</label>
