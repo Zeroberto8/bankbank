@@ -758,7 +758,7 @@ export default function App() {
       `}</style>
 
       {/* HEADER */}
-      <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "10px 16px", flexShrink: 0, display: view === "map" ? "flex" : "grid", gridTemplateColumns: view === "map" ? undefined : "1fr auto 1fr", alignItems: "center", justifyContent: view === "map" ? "space-between" : undefined, gap: 8 }}>
+      <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "10px 16px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         {view === "map" ? (
           <>
             <div onClick={goHome} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}>
@@ -770,13 +770,8 @@ export default function App() {
           </>
         ) : (
           <>
-            <div style={{ justifySelf: "start" }}>
-              <button onClick={goBack} style={{ fontSize: 14, fontWeight: 700, background: "rgba(255,255,255,.15)", padding: "6px 14px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer" }}>← Zurück</button>
-            </div>
-            <button onClick={() => navTo("list")} style={{ justifySelf: "center", fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer", whiteSpace: "nowrap" }}>{loading ? "..." : benches.length} Bänke</button>
-            <div style={{ justifySelf: "end" }}>
-              <button onClick={goHome} aria-label="Startseite" style={{ fontSize: 20, background: "rgba(255,255,255,.15)", width: 36, height: 36, borderRadius: "50%", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>🪑</button>
-            </div>
+            <button onClick={goBack} style={{ fontSize: 14, fontWeight: 700, background: "rgba(255,255,255,.15)", padding: "6px 14px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer" }}>← Zurück</button>
+            <button onClick={goHome} style={{ fontSize: 14, fontWeight: 700, background: "rgba(255,255,255,.15)", padding: "6px 14px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer" }}>🪑 Home</button>
           </>
         )}
       </div>
