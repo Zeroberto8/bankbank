@@ -920,7 +920,7 @@ export default function App() {
           <div style={{ margin: "6px 16px", background: "#fff", borderRadius: 14, padding: 12, border: `1px solid ${T.brd}`, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: T.mut }}>Sortieren nach:</span>
             <select value={listSort} onChange={e => setListSort(e.target.value)}
-              style={{ flex: 1, padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 13, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", cursor: "pointer" }}>
+              style={{ flex: 1, minWidth: 0, maxWidth: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 16, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", cursor: "pointer" }}>
               <option value="date">📅 Eintragungsdatum (neueste zuerst)</option>
               <option value="user">👤 Nutzername (A–Z)</option>
               <option value="distance" disabled={!userPos}>📏 Entfernung{!userPos ? " (kein Standort)" : ""}</option>
@@ -1129,7 +1129,7 @@ export default function App() {
             <div style={{ margin: "12px 16px", background: "#fff", borderRadius: 14, padding: 12, border: `1px solid ${T.brd}`, display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: T.mut }}>Sortieren nach:</span>
               <select value={adminSort} onChange={e => setAdminSort(e.target.value)}
-                style={{ flex: 1, padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 13, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", cursor: "pointer" }}>
+                style={{ flex: 1, minWidth: 0, maxWidth: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 16, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", cursor: "pointer" }}>
                 <option value="date">📅 Eintragungsdatum (neueste zuerst)</option>
                 <option value="user">👤 Nutzername (A–Z)</option>
                 <option value="distance" disabled={!userPos}>📏 Entfernung{!userPos ? " (kein Standort)" : ""}</option>
