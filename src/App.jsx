@@ -146,6 +146,7 @@ export default function App() {
   const [revText, setRevText] = useState("");
   const [revUser, setRevUser] = useState(() => localStorage.getItem("bankbank_user") || "");
   const [revSubmitting, setRevSubmitting] = useState(false);
+  const [revPhoto, setRevPhoto] = useState(null);
   const revSubmittingRef = useRef(false);
   // Admin state
   const [adminAuth, setAdminAuth] = useState(false);
@@ -254,7 +255,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("benches")
-        .select("id, title, description, lat, lng, user_name, created_at, photo_url, comments(id, user_name, rating, text, created_at)")
+        .select("id, title, description, lat, lng, user_name, created_at, photo_url, comments(id, user_name, rating, text, created_at, photo_url)")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -270,12 +271,13 @@ export default function App() {
           date: new Date(b.created_at).toISOString().split("T")[0],
           ratings: cms.map(c => c.rating),
           comments: cms
-            .filter(c => c.text)
+            .filter(c => c.text || c.photo_url)
             .map(c => ({
               id: c.id,
               user: c.user_name,
               text: c.text,
               rating: c.rating,
+              photo: c.photo_url || null,
               date: new Date(c.created_at).toISOString().split("T")[0],
             })),
         };
@@ -294,7 +296,7 @@ export default function App() {
     try {
       // Kommentare und Foto parallel laden
       const [commentsRes, photoRes] = await Promise.all([
-        supabase.from("comments").select("id, user_name, text, rating, created_at").eq("bench_id", bench.id),
+        supabase.from("comments").select("id, user_name, text, rating, created_at, photo_url").eq("bench_id", bench.id),
         bench.photo ? Promise.resolve(null) : supabase.from("benches").select("photo_url").eq("id", bench.id).single(),
       ]);
 
@@ -306,9 +308,10 @@ export default function App() {
           ...bench,
           photo,
           ratings: data.map(c => c.rating),
-          comments: data.filter(c => c.text).map(c => ({
+          comments: data.filter(c => c.text || c.photo_url).map(c => ({
             id: c.id, user: c.user_name, text: c.text,
             rating: c.rating,
+            photo: c.photo_url || null,
             date: new Date(c.created_at).toISOString().split("T")[0],
           })),
         };
@@ -535,11 +538,28 @@ export default function App() {
     revSubmittingRef.current = true;
     setRevSubmitting(true);
     try {
+      // Foto in Supabase Storage hochladen (falls vorhanden)
+      let photoUrl = null;
+      if (revPhoto?.blob) {
+        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("bench-photos")
+          .upload(fileName, revPhoto.blob, { contentType: "image/jpeg", cacheControl: "31536000" });
+
+        if (uploadError) {
+          console.error("Foto-Upload fehlgeschlagen:", uploadError);
+        } else {
+          const { data: urlData } = supabase.storage.from("bench-photos").getPublicUrl(fileName);
+          photoUrl = urlData.publicUrl;
+        }
+      }
+
       const { error } = await supabase.from("comments").insert({
         bench_id: sel.id,
         user_name: revUser.trim(),
         rating: revRating,
         text: revText.trim() || null,
+        photo_url: photoUrl,
       });
       if (error) {
         console.error("Fehler beim Speichern der Bewertung:", error);
@@ -549,6 +569,8 @@ export default function App() {
       localStorage.setItem("bankbank_user", revUser.trim());
       setRevRating(0);
       setRevText("");
+      if (revPhoto?.preview) URL.revokeObjectURL(revPhoto.preview);
+      setRevPhoto(null);
       flash("⭐ Bewertung gespeichert!");
       // Detail neu laden, damit Mittelwert + Liste aktuell sind
       await fetchCommentsFor(sel);
@@ -591,6 +613,19 @@ export default function App() {
       const blob = await compressImage(f);
       const preview = URL.createObjectURL(blob);
       setNewPhoto({ blob, preview });
+    } catch (err) {
+      console.error("Foto-Komprimierung fehlgeschlagen:", err);
+      flash("Foto konnte nicht verarbeitet werden.");
+    }
+  };
+
+  const onRevPhoto = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const blob = await compressImage(f);
+      const preview = URL.createObjectURL(blob);
+      setRevPhoto({ blob, preview });
     } catch (err) {
       console.error("Foto-Komprimierung fehlgeschlagen:", err);
       flash("Foto konnte nicht verarbeitet werden.");
@@ -791,6 +826,17 @@ export default function App() {
                   <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Kommentar (optional)</label>
                   <textarea placeholder="Dein Eindruck von dieser Bank..." value={revText} onChange={e => setRevText(e.target.value)} style={{ ...inp, minHeight: 70, resize: "vertical" }} />
                 </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto (optional)</label>
+                  {revPhoto ? (
+                    <div style={{ position: "relative" }}><img src={revPhoto.preview} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
+                      <button onClick={() => { if (revPhoto?.preview) URL.revokeObjectURL(revPhoto.preview); setRevPhoto(null); }} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
+                  ) : (
+                    <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 80, border: `2px dashed ${T.brd}`, borderRadius: 12, cursor: "pointer", color: T.mut, fontSize: 13, gap: 4 }}>
+                      <span style={{ fontSize: 24 }}>📷</span>Foto aufnehmen
+                      <input type="file" accept="image/*" capture="environment" onChange={onRevPhoto} style={{ display: "none" }} /></label>
+                  )}
+                </div>
                 <button
                   onClick={addReview}
                   disabled={!revUser.trim() || !revRating || revSubmitting}
@@ -814,7 +860,8 @@ export default function App() {
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                     <span style={{ fontWeight: 700, fontSize: 13 }}>{c.user}</span><Stars rating={c.rating} size={11} />
                   </div>
-                  <p style={{ margin: 0, fontSize: 13, color: T.mut }}>{c.text}</p>
+                  {c.text && <p style={{ margin: 0, fontSize: 13, color: T.mut }}>{c.text}</p>}
+                  {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 300, objectFit: "cover", borderRadius: 10, marginTop: 6, display: "block" }} />}
                   <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
                 </div>
               ))}
@@ -1039,7 +1086,8 @@ export default function App() {
                           <span style={{ fontWeight: 700, fontSize: 12 }}>{c.user}</span>
                           <Stars rating={c.rating} size={11} />
                         </div>
-                        <p style={{ margin: 0, fontSize: 12, color: T.txt, lineHeight: 1.4 }}>{c.text}</p>
+                        {c.text && <p style={{ margin: 0, fontSize: 12, color: T.txt, lineHeight: 1.4 }}>{c.text}</p>}
+                        {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, marginTop: 6, display: "block" }} />}
                         <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
                       </div>
                     ))}
@@ -1102,7 +1150,8 @@ export default function App() {
                           <span style={{ fontWeight: 700, fontSize: 11 }}>{c.user}</span>
                           <Stars rating={c.rating} size={10} />
                         </div>
-                        <p style={{ margin: 0, fontSize: 11, color: T.mut, lineHeight: 1.4 }}>{c.text}</p>
+                        {c.text && <p style={{ margin: 0, fontSize: 11, color: T.mut, lineHeight: 1.4 }}>{c.text}</p>}
+                        {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 180, objectFit: "cover", borderRadius: 6, marginTop: 4, display: "block" }} />}
                         <span style={{ fontSize: 9, color: T.mut }}>{c.date}</span>
                       </div>
                     ))}
