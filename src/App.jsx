@@ -158,6 +158,7 @@ export default function App() {
   const [editDesc, setEditDesc] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [adminSort, setAdminSort] = useState("date"); // date | user | distance | rating
+  const [listSort, setListSort] = useState("distance"); // date | user | distance | rating
   const [adminDetail, setAdminDetail] = useState(null); // gewählte Bank für Admin-Detailansicht
 
   // Hash-basierter Admin-Zugang: #admin in der URL öffnet das Admin-Panel
@@ -638,9 +639,17 @@ export default function App() {
   // und für die Swipe-Navigation in der Detailansicht verwendet
   const sortedList = useMemo(() => {
     const arr = [...filtered];
-    if (userPos) arr.sort((a, b) => dist(userPos.lat, userPos.lng, a.lat, a.lng) - dist(userPos.lat, userPos.lng, b.lat, b.lng));
+    if (listSort === "user") {
+      arr.sort((a, b) => (a.user || "").localeCompare(b.user || "", "de", { sensitivity: "base" }));
+    } else if (listSort === "rating") {
+      arr.sort((a, b) => parseFloat(avg(b.ratings)) - parseFloat(avg(a.ratings)) || 0);
+    } else if (listSort === "distance" && userPos) {
+      arr.sort((a, b) => dist(userPos.lat, userPos.lng, a.lat, a.lng) - dist(userPos.lat, userPos.lng, b.lat, b.lng));
+    } else if (listSort === "date") {
+      arr.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    }
     return arr;
-  }, [filtered, userPos]);
+  }, [filtered, listSort, userPos]);
 
   // Swipe in Detailansicht: links = nächste Bank, rechts = vorherige Bank
   const swipeRef = useRef(null);
@@ -908,6 +917,16 @@ export default function App() {
       {view === "list" && (
         <div style={{ flex: 1, overflow: "auto", background: T.bg, position: "relative" }}>
           <div style={{ padding: "12px 16px 6px" }}><input type="text" placeholder="🔍 Bank suchen..." value={search} onChange={e => setSearch(e.target.value)} style={inp} /></div>
+          <div style={{ margin: "6px 16px", background: "#fff", borderRadius: 14, padding: 12, border: `1px solid ${T.brd}`, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: T.mut }}>Sortieren nach:</span>
+            <select value={listSort} onChange={e => setListSort(e.target.value)}
+              style={{ flex: 1, padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 13, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", cursor: "pointer" }}>
+              <option value="date">📅 Eintragungsdatum (neueste zuerst)</option>
+              <option value="user">👤 Nutzername (A–Z)</option>
+              <option value="distance" disabled={!userPos}>📏 Entfernung{!userPos ? " (kein Standort)" : ""}</option>
+              <option value="rating">⭐ Bewertung (höchste zuerst)</option>
+            </select>
+          </div>
           {loading && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 40 }}><div style={{ width: 28, height: 28, border: `3px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} /><p style={{ margin: 0, fontSize: 14, color: T.mut }}>Bänke werden geladen...</p></div>}
           {fetchError && <div style={{ textAlign: "center", padding: 40 }}><p style={{ fontSize: 14, color: "#dc3545", fontWeight: 600 }}>{fetchError}</p><button onClick={fetchBenches} style={{ marginTop: 8, padding: "8px 20px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Erneut versuchen</button></div>}
           {!loading && !fetchError && filtered.length === 0 && <p style={{ textAlign: "center", color: T.mut, padding: 40 }}>Keine Bänke gefunden 🪑</p>}
