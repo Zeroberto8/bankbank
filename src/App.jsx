@@ -657,7 +657,19 @@ export default function App() {
     }
   };
 
-  const filtered = benches.filter(b => b.title.toLowerCase().includes(search.toLowerCase()) || b.description.toLowerCase().includes(search.toLowerCase()));
+  const filtered = (() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return benches;
+    return benches.filter(b => {
+      const haystack = [
+        b.title,
+        b.description,
+        b.user,
+        ...b.comments.flatMap(c => [c.user, c.text]),
+      ];
+      return haystack.some(s => s && s.toLowerCase().includes(q));
+    });
+  })();
 
   // Mögliche Dublette: nächste vorhandene Bank im Umkreis von 25 m zur neuen Position
   const nearbyBench = useMemo(() => {
