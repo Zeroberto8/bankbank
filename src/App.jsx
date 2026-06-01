@@ -456,7 +456,7 @@ export default function App() {
 
   const addBench = async () => {
     if (submittingRef.current) return;
-    if (!newTitle.trim() || !newUser.trim() || !newPos || !newRating) return;
+    if (!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhoto) return;
 
     // Inhaltsmoderation
     if (containsBadWords(newTitle) || containsBadWords(newDesc) || containsBadWords(newUser)) {
@@ -528,7 +528,7 @@ export default function App() {
   // Bewertung/Kommentar zu bestehender Bank hinzufügen
   const addReview = async () => {
     if (revSubmittingRef.current) return;
-    if (!sel || !revUser.trim() || !revRating) return;
+    if (!sel || !revUser.trim() || !revRating || !revText.trim() || !revPhoto) return;
 
     if (containsBadWords(revUser) || containsBadWords(revText)) {
       flash("⚠️ Dein Kommentar enthält unangemessene Begriffe und kann nicht gespeichert werden.");
@@ -823,11 +823,11 @@ export default function App() {
                   <Stars rating={revRating} size={28} interactive onRate={setRevRating} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Kommentar (optional)</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Kommentar *</label>
                   <textarea placeholder="Dein Eindruck von dieser Bank..." value={revText} onChange={e => setRevText(e.target.value)} style={{ ...inp, minHeight: 70, resize: "vertical" }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto (optional)</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto *</label>
                   {revPhoto ? (
                     <div style={{ position: "relative" }}><img src={revPhoto.preview} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
                       <button onClick={() => { if (revPhoto?.preview) URL.revokeObjectURL(revPhoto.preview); setRevPhoto(null); }} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
@@ -839,8 +839,8 @@ export default function App() {
                 </div>
                 <button
                   onClick={addReview}
-                  disabled={!revUser.trim() || !revRating || revSubmitting}
-                  style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: revSubmitting ? "not-allowed" : "pointer", opacity: (!revUser.trim() || !revRating || revSubmitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}
+                  disabled={!revUser.trim() || !revRating || !revText.trim() || !revPhoto || revSubmitting}
+                  style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: revSubmitting ? "not-allowed" : "pointer", opacity: (!revUser.trim() || !revRating || !revText.trim() || !revPhoto || revSubmitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}
                 >
                   {revSubmitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}
                   {revSubmitting ? "Wird gespeichert..." : "Bewertung absenden ✓"}
@@ -886,9 +886,9 @@ export default function App() {
               <input type="text" placeholder="z.B. Anna M." value={newUser} onChange={e => setNewUser(e.target.value)} style={inp} /></div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Name der Bank *</label>
               <input type="text" placeholder="z.B. Sonnenbank am See" value={newTitle} onChange={e => setNewTitle(e.target.value)} style={inp} /></div>
-            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Beschreibung</label>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Beschreibung *</label>
               <textarea placeholder="Was macht sie besonders?" value={newDesc} onChange={e => setNewDesc(e.target.value)} style={{ ...inp, minHeight: 60, resize: "vertical" }} /></div>
-            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto</label>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto *</label>
               {newPhoto ? (
                 <div style={{ position: "relative" }}><img src={newPhoto.preview} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
                   <button onClick={() => { if (newPhoto?.preview) URL.revokeObjectURL(newPhoto.preview); setNewPhoto(null); }} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
@@ -899,7 +899,7 @@ export default function App() {
               )}</div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Bewertung *</label>
               <Stars rating={newRating} size={28} interactive onRate={setNewRating} /></div>
-            <button onClick={addBench} disabled={!newTitle.trim() || !newUser.trim() || !newPos || !newRating || submitting} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: (!newTitle.trim() || !newUser.trim() || !newPos || !newRating || submitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>{submitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}{submitting ? "Wird gespeichert..." : "Eintragen ✓"}</button>
+            <button onClick={addBench} disabled={!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhoto || submitting} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: (!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhoto || submitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>{submitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}{submitting ? "Wird gespeichert..." : "Eintragen ✓"}</button>
           </div>
         </div>
       )}
