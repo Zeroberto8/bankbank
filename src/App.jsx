@@ -662,7 +662,7 @@ export default function App() {
           <div><div style={{ fontSize: 18, fontWeight: 700 }}>BankBank</div>
             <div style={{ fontSize: 8, opacity: .75, letterSpacing: 1.5, textTransform: "uppercase" }}>Mach mal Pause</div></div>
         </div>
-        <div style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20 }}>{loading ? "..." : benches.length} Bänke</div>
+        <button onClick={() => setView("list")} style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer" }}>{loading ? "..." : benches.length} Bänke</button>
       </div>
 
       {/* === ERROR STATE (nur bei Fehler, blockiert Karte) === */}
