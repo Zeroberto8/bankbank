@@ -160,6 +160,9 @@ export default function App() {
   const [adminSort, setAdminSort] = useState("date"); // date | user | distance | rating
   const [listSort, setListSort] = useState("distance"); // date | user | distance | rating
   const [adminDetail, setAdminDetail] = useState(null); // gewählte Bank für Admin-Detailansicht
+  const [editComment, setEditComment] = useState(null); // gewählter Kommentar für Bearbeitung
+  const [editCommentText, setEditCommentText] = useState("");
+  const [editCommentRating, setEditCommentRating] = useState(0);
 
   // Hash-basierter Admin-Zugang: #admin in der URL öffnet das Admin-Panel
   useEffect(() => {
@@ -604,6 +607,27 @@ export default function App() {
     if (error) { flash("Fehler beim Speichern!"); return; }
     setEditBench(null); setEditTitle(""); setEditDesc("");
     flash("✅ Bank aktualisiert!");
+    fetchBenches();
+  };
+
+  // Admin: Kommentar bearbeiten
+  const updateComment = async () => {
+    if (!editComment || !editCommentRating) return;
+    const { error } = await supabase.from("comments").update({
+      text: editCommentText.trim() || null,
+      rating: editCommentRating,
+    }).eq("id", editComment.id);
+    if (error) { flash("Fehler beim Speichern!"); return; }
+    setEditComment(null); setEditCommentText(""); setEditCommentRating(0);
+    flash("✅ Kommentar aktualisiert!");
+    fetchBenches();
+  };
+
+  // Admin: Kommentar löschen
+  const deleteComment = async (id) => {
+    const { error } = await supabase.from("comments").delete().eq("id", id);
+    if (error) { flash("Fehler beim Löschen!"); return; }
+    flash("🗑️ Kommentar gelöscht!");
     fetchBenches();
   };
 
@@ -1101,13 +1125,39 @@ export default function App() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {b.comments.map(c => (
                       <div key={c.id} style={{ background: T.bg, borderRadius: 10, padding: 10, border: `1px solid ${T.brd}` }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                          <span style={{ fontWeight: 700, fontSize: 12 }}>{c.user}</span>
-                          <Stars rating={c.rating} size={11} />
-                        </div>
-                        {c.text && <p style={{ margin: 0, fontSize: 12, color: T.txt, lineHeight: 1.4 }}>{c.text}</p>}
-                        {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, marginTop: 6, display: "block" }} />}
-                        <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
+                        {editComment?.id === c.id ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <span style={{ fontWeight: 700, fontSize: 12 }}>{c.user}</span>
+                            <Stars rating={editCommentRating} size={22} interactive onRate={setEditCommentRating} />
+                            <textarea value={editCommentText} onChange={e => setEditCommentText(e.target.value)} rows={3}
+                              style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 16, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", resize: "vertical" }} />
+                            {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, display: "block" }} />}
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button onClick={() => { setEditComment(null); setEditCommentText(""); setEditCommentRating(0); }}
+                                style={{ flex: 1, padding: 8, borderRadius: 10, border: `1px solid ${T.brd}`, background: "#fff", color: T.txt, fontSize: 12, cursor: "pointer" }}>Abbrechen</button>
+                              <button onClick={updateComment} disabled={!editCommentRating}
+                                style={{ flex: 1, padding: 8, borderRadius: 10, border: "none", background: T.pri, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: !editCommentRating ? .5 : 1 }}>Speichern</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                              <span style={{ fontWeight: 700, fontSize: 12 }}>{c.user}</span>
+                              <Stars rating={c.rating} size={11} />
+                            </div>
+                            {c.text && <p style={{ margin: 0, fontSize: 12, color: T.txt, lineHeight: 1.4 }}>{c.text}</p>}
+                            {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, marginTop: 6, display: "block" }} />}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                              <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button onClick={() => { setEditComment(c); setEditCommentText(c.text || ""); setEditCommentRating(c.rating || 0); }}
+                                  style={{ border: "none", background: "rgba(0,0,0,.06)", color: T.txt, padding: "4px 10px", borderRadius: 12, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✏️ Bearbeiten</button>
+                                <button onClick={() => { if (confirm("Diesen Kommentar wirklich löschen?")) deleteComment(c.id); }}
+                                  style={{ border: "none", background: "rgba(220,53,69,.12)", color: "#dc3545", padding: "4px 10px", borderRadius: 12, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🗑️</button>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>
