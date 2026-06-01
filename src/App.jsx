@@ -748,7 +748,7 @@ export default function App() {
 
       {/* HEADER */}
       <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div onClick={() => { setView("map"); setSel(null); setAdminDetail(null); }} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
           <span style={{ fontSize: 22 }}>🪑</span>
           <div><div style={{ fontSize: 18, fontWeight: 700 }}>BankBank</div>
             <div style={{ fontSize: 8, opacity: .75, letterSpacing: 1.5, textTransform: "uppercase" }}>Mach mal Pause</div></div>
