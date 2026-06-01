@@ -921,10 +921,10 @@ export default function App() {
             <span style={{ fontSize: 12, fontWeight: 600, color: T.mut }}>Sortieren nach:</span>
             <select value={listSort} onChange={e => setListSort(e.target.value)}
               style={{ flex: 1, minWidth: 0, maxWidth: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 16, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", cursor: "pointer" }}>
-              <option value="date">📅 Eintragungsdatum (neueste zuerst)</option>
-              <option value="user">👤 Nutzername (A–Z)</option>
-              <option value="distance" disabled={!userPos}>📏 Entfernung{!userPos ? " (kein Standort)" : ""}</option>
-              <option value="rating">⭐ Bewertung (höchste zuerst)</option>
+              <option value="date">Eintragungsdatum (neueste zuerst)</option>
+              <option value="user">Nutzername (A–Z)</option>
+              <option value="distance" disabled={!userPos}>Entfernung{!userPos ? " (kein Standort)" : ""}</option>
+              <option value="rating">Bewertung (höchste zuerst)</option>
             </select>
           </div>
           {loading && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 40 }}><div style={{ width: 28, height: 28, border: `3px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} /><p style={{ margin: 0, fontSize: 14, color: T.mut }}>Bänke werden geladen...</p></div>}
@@ -1130,10 +1130,10 @@ export default function App() {
               <span style={{ fontSize: 12, fontWeight: 600, color: T.mut }}>Sortieren nach:</span>
               <select value={adminSort} onChange={e => setAdminSort(e.target.value)}
                 style={{ flex: 1, minWidth: 0, maxWidth: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 16, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", cursor: "pointer" }}>
-                <option value="date">📅 Eintragungsdatum (neueste zuerst)</option>
-                <option value="user">👤 Nutzername (A–Z)</option>
-                <option value="distance" disabled={!userPos}>📏 Entfernung{!userPos ? " (kein Standort)" : ""}</option>
-                <option value="rating">⭐ Bewertung (höchste zuerst)</option>
+                <option value="date">Eintragungsdatum (neueste zuerst)</option>
+                <option value="user">Nutzername (A–Z)</option>
+                <option value="distance" disabled={!userPos}>Entfernung{!userPos ? " (kein Standort)" : ""}</option>
+                <option value="rating">Bewertung (höchste zuerst)</option>
               </select>
             </div>
           )}
