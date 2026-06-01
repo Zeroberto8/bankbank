@@ -1036,10 +1036,6 @@ export default function App() {
               </div>
             );
           })}
-          {/* Floating Button rechts unten */}
-          <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 20 }}>
-            <button onClick={goHome} style={{ ...btnStyle, background: "#fff", color: T.pri }}>🗺️</button>
-          </div>
         </div>
       )}
 
