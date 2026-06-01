@@ -978,7 +978,7 @@ export default function App() {
       {/* === LIST VIEW === */}
       {view === "list" && (
         <div style={{ flex: 1, overflow: "auto", background: T.bg, position: "relative" }}>
-          <div style={{ padding: "12px 16px 6px" }}><input type="text" placeholder="🔍 Bänke, Besonderheiten und Nutzer suchen" value={search} onChange={e => setSearch(e.target.value)} style={inp} /></div>
+          <div style={{ padding: "12px 16px 6px" }}><input type="text" placeholder="🔍 Bänke, Besonderheiten, Nutzer" value={search} onChange={e => setSearch(e.target.value)} style={inp} /></div>
           <div style={{ margin: "6px 16px", background: "#fff", borderRadius: 14, padding: 12, border: `1px solid ${T.brd}`, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: T.mut }}>Sortieren nach:</span>
             <select value={listSort} onChange={e => setListSort(e.target.value)}
