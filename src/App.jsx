@@ -996,7 +996,10 @@ export default function App() {
             const d = userPos ? dist(userPos.lat, userPos.lng, b.lat, b.lng) : null;
             return (
               <div key={b.id} onClick={() => { selectBench(b); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer", display: "flex", gap: 12 }}>
-                {b.photo && <img src={b.photo} alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10, flexShrink: 0 }} />}
+                <div style={{ flexShrink: 0, width: 64, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {b.photo && <img src={b.photo} alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10 }} />}
+                  <span style={{ fontSize: 12, color: T.mut, textAlign: "center", wordBreak: "break-word" }}>{b.user}</span>
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
