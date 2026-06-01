@@ -328,6 +328,17 @@ export default function App() {
     setDetailLoading(false);
   }, []);
 
+  // Navigation – nutzt die vorhandene Browser-History (pushState/popstate s. o.),
+  // damit Header-Zurück und Hardware-Zurück-Taste dieselbe Logik teilen.
+  const navTo = useCallback((v) => setView(v), []);
+  const goBack = useCallback(() => {
+    if (adminDetail) { setAdminDetail(null); return; } // im Admin erst die Detailansicht schließen
+    window.history.back();
+  }, [adminDetail]);
+  const goHome = useCallback(() => {
+    setAdminDetail(null); setSel(null); setView("map");
+  }, []);
+
   // Bank auswählen und Kommentare nachladen
   const selectBench = useCallback((bench) => {
     setSel(bench);
@@ -747,13 +758,27 @@ export default function App() {
       `}</style>
 
       {/* HEADER */}
-      <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div onClick={() => { setView("map"); setSel(null); setAdminDetail(null); }} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}>
-          <span style={{ fontSize: 22 }}>🪑</span>
-          <div><div style={{ fontSize: 18, fontWeight: 700 }}>BankBank</div>
-            <div style={{ fontSize: 8, opacity: .75, letterSpacing: 1.5, textTransform: "uppercase" }}>Mach mal Pause</div></div>
-        </div>
-        <button onClick={() => setView("list")} style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer" }}>{loading ? "..." : benches.length} Bänke</button>
+      <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "10px 16px", flexShrink: 0, display: view === "map" ? "flex" : "grid", gridTemplateColumns: view === "map" ? undefined : "1fr auto 1fr", alignItems: "center", justifyContent: view === "map" ? "space-between" : undefined, gap: 8 }}>
+        {view === "map" ? (
+          <>
+            <div onClick={goHome} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}>
+              <span style={{ fontSize: 22 }}>🪑</span>
+              <div><div style={{ fontSize: 18, fontWeight: 700 }}>BankBank</div>
+                <div style={{ fontSize: 8, opacity: .75, letterSpacing: 1.5, textTransform: "uppercase" }}>Mach mal Pause</div></div>
+            </div>
+            <button onClick={() => navTo("list")} style={{ fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer" }}>{loading ? "..." : benches.length} Bänke</button>
+          </>
+        ) : (
+          <>
+            <div style={{ justifySelf: "start" }}>
+              <button onClick={goBack} style={{ fontSize: 14, fontWeight: 700, background: "rgba(255,255,255,.15)", padding: "6px 14px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer" }}>← Zurück</button>
+            </div>
+            <button onClick={() => navTo("list")} style={{ justifySelf: "center", fontSize: 11, background: "rgba(255,255,255,.15)", padding: "3px 10px", borderRadius: 20, border: "none", color: "#fff", cursor: "pointer", whiteSpace: "nowrap" }}>{loading ? "..." : benches.length} Bänke</button>
+            <div style={{ justifySelf: "end" }}>
+              <button onClick={goHome} aria-label="Startseite" style={{ fontSize: 20, background: "rgba(255,255,255,.15)", width: 36, height: 36, borderRadius: "50%", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>🪑</button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* === ERROR STATE (nur bei Fehler, blockiert Karte) === */}
@@ -818,8 +843,8 @@ export default function App() {
           {/* Buttons rechts unten */}
           <div data-btn="1" style={{ position: "absolute", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
             <button onClick={() => { if (userPos) { setCLat(userPos.lat); setCLng(userPos.lng); setZoom(13); flash("📍 Dein Standort"); } }} style={{ ...btnStyle, background: "#fff", color: userPos ? "#4285F4" : "#aaa" }}>◎</button>
-            <button onClick={() => { if (userPos) { setNewPos({ lat: userPos.lat, lng: userPos.lng }); setView("add"); } else { flash("📍 Standort wird ermittelt..."); } }} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
-            <button onClick={() => setView("list")} style={{ ...btnStyle, background: "#fff", color: T.pri }}>📋</button>
+            <button onClick={() => { if (userPos) { setNewPos({ lat: userPos.lat, lng: userPos.lng }); navTo("add"); } else { flash("📍 Standort wird ermittelt..."); } }} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
+            <button onClick={() => navTo("list")} style={{ ...btnStyle, background: "#fff", color: T.pri }}>📋</button>
           </div>
 
           <div style={{ position: "absolute", bottom: 4, left: 4, fontSize: 8, color: "#666", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3, zIndex: 10 }}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org/" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenTopoMap</a> (CC-BY-SA)</div>
@@ -861,7 +886,7 @@ export default function App() {
           </div>
           {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: "auto", maxHeight: 420, objectFit: "cover", display: "block", borderRadius: 16 }} /></div>}
           <div style={{ padding: 16 }}>
-            <button onClick={() => { setCLat(sel.lat); setCLng(sel.lng); setZoom(17); setView("map"); setSel(null); }} style={{ display: "block", width: "100%", padding: "12px 16px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>📍 Zeige in der Karte</button>
+            <button onClick={() => { setCLat(sel.lat); setCLng(sel.lng); setZoom(17); goHome(); }} style={{ display: "block", width: "100%", padding: "12px 16px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>📍 Zeige in der Karte</button>
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
               <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
               <p style={{ margin: 0, fontSize: 13, color: T.mut, lineHeight: 1.5 }}>{sel.description}</p>
@@ -933,7 +958,7 @@ export default function App() {
       {view === "add" && (
         <div style={{ flex: 1, overflow: "auto", background: T.bg }}>
           <div style={{ background: `linear-gradient(135deg,#B8860B,${T.acc})`, color: "#fff", padding: "20px 16px 28px" }}>
-            <button onClick={() => { setView("map"); setNewPos(null); }} style={bk}>← Abbrechen</button>
+            <button onClick={() => { setNewPos(null); goBack(); }} style={bk}>← Abbrechen</button>
             <h2 style={{ margin: 0, fontSize: 20 }}>🪑 Neue Bank</h2>
             {newPos && <p style={{ margin: "6px 0 0", fontSize: 12, opacity: .8 }}>📍 {newPos.lat.toFixed(4)}, {newPos.lng.toFixed(4)}</p>}
           </div>
@@ -947,7 +972,7 @@ export default function App() {
                   „{nearbyBench.bench.title}" liegt nur ca. {nearbyBench.meters} m entfernt. Ist es dieselbe Bank? Dann bewerte sie lieber, statt sie doppelt einzutragen.
                 </p>
                 <button
-                  onClick={() => { setView("map"); setNewPos(null); selectBench(nearbyBench.bench); }}
+                  onClick={() => { setNewPos(null); selectBench(nearbyBench.bench); }}
                   style={{ width: "100%", padding: 10, borderRadius: 10, border: "none", background: "#E8A838", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                   ⭐ Diese Bank bewerten
                 </button>
@@ -1013,7 +1038,7 @@ export default function App() {
           })}
           {/* Floating Button rechts unten */}
           <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 20 }}>
-            <button onClick={() => setView("map")} style={{ ...btnStyle, background: "#fff", color: T.pri }}>🗺️</button>
+            <button onClick={goHome} style={{ ...btnStyle, background: "#fff", color: T.pri }}>🗺️</button>
           </div>
         </div>
       )}
