@@ -349,6 +349,28 @@ export default function App() {
   // Beim Start laden
   useEffect(() => { fetchBenches(); }, [fetchBenches]);
 
+  // Deep-Link aus der Tagesbericht-E-Mail: #bank-<id> öffnet direkt die
+  // Detailansicht der jeweiligen Bank. Da die Bänke asynchron geladen werden,
+  // hängt dieser Effekt an `benches` und greift, sobald die passende Bank da ist.
+  // Der Ref merkt sich den bereits behandelten Hash, damit ein erneutes Laden
+  // der Bänke (z. B. nach einer Bewertung) den Nutzer nicht zurück ins Detail zwingt.
+  const deepLinkRef = useRef(null);
+  useEffect(() => {
+    const openFromHash = () => {
+      const m = window.location.hash.match(/^#bank-(.+)$/);
+      if (!m) { deepLinkRef.current = null; return; }
+      if (deepLinkRef.current === window.location.hash) return;
+      const bench = benches.find(b => String(b.id) === m[1]);
+      if (bench) {
+        deepLinkRef.current = window.location.hash;
+        selectBench(bench);
+      }
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, [benches, selectBench]);
+
   // Mercator geo <-> pixel conversion
   const geo2px = useCallback((lat, lng) => {
     const cxW = (cLng + 180) / 360 * worldSize;
