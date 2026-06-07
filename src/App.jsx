@@ -858,19 +858,19 @@ export default function App() {
           )}
 
           {/* Buttons rechts unten */}
-          <div data-btn="1" style={{ position: "absolute", bottom: "calc(16px + env(safe-area-inset-bottom, 0px))", right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
+          <div data-btn="1" style={{ position: "absolute", bottom: "calc(16px + env(safe-area-inset-bottom, 0px) + var(--nav-pad, 0px))", right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 20 }}>
             <button onClick={() => { if (userPos) { setCLat(userPos.lat); setCLng(userPos.lng); setZoom(13); flash("📍 Dein Standort"); } }} style={{ ...btnStyle, background: "#fff", color: userPos ? "#4285F4" : "#aaa" }}>◎</button>
             <button onClick={() => { if (userPos) { setNewPos({ lat: userPos.lat, lng: userPos.lng }); navTo("add"); } else { flash("📍 Standort wird ermittelt..."); } }} style={{ ...btnStyle, background: "linear-gradient(135deg,#E8A838,#D4922A)", color: "#fff", fontSize: 22 }}>+</button>
             <button onClick={() => navTo("list")} style={{ ...btnStyle, background: "#fff", color: T.pri }}>📋</button>
           </div>
 
-          <div style={{ position: "absolute", bottom: "calc(4px + env(safe-area-inset-bottom, 0px))", left: 4, fontSize: 8, color: "#666", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3, zIndex: 10 }}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org/" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenTopoMap</a> (CC-BY-SA)</div>
+          <div style={{ position: "absolute", bottom: "calc(4px + env(safe-area-inset-bottom, 0px) + var(--nav-pad, 0px))", left: 4, fontSize: 8, color: "#666", background: "rgba(255,255,255,.7)", padding: "1px 4px", borderRadius: 3, zIndex: 10 }}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org/" target="_blank" rel="noreferrer" style={{ color: "#666" }}>OpenTopoMap</a> (CC-BY-SA)</div>
         </div>
       )}
 
       {/* === DETAIL VIEW === */}
       {view === "detail" && sel && (
-        <div onTouchStart={onDetailTouchStart} onTouchEnd={onDetailTouchEnd} style={{ flex: 1, overflow: "auto", background: T.bg, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div onTouchStart={onDetailTouchStart} onTouchEnd={onDetailTouchEnd} style={{ flex: 1, overflow: "auto", background: T.bg, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--nav-pad, 0px))" }}>
           {(() => {
             const idx = sortedList.findIndex(b => b.id === sel.id);
             const total = sortedList.length;
@@ -973,7 +973,7 @@ export default function App() {
 
       {/* === ADD FORM === */}
       {view === "add" && (
-        <div style={{ flex: 1, overflow: "auto", background: T.bg, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ flex: 1, overflow: "auto", background: T.bg, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--nav-pad, 0px))" }}>
           <div style={{ background: `linear-gradient(135deg,#B8860B,${T.acc})`, color: "#fff", padding: "20px 16px 28px" }}>
             <button onClick={() => { setNewPos(null); goBack(); }} style={bk}>← Abbrechen</button>
             <h2 style={{ margin: 0, fontSize: 20 }}>🪑 Neue Bank</h2>
@@ -1019,7 +1019,7 @@ export default function App() {
 
       {/* === LIST VIEW === */}
       {view === "list" && (
-        <div style={{ flex: 1, overflow: "auto", background: T.bg, position: "relative", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ flex: 1, overflow: "auto", background: T.bg, position: "relative", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--nav-pad, 0px))" }}>
           <div style={{ padding: "12px 16px 6px" }}><input type="text" placeholder="🔍 Bänke, Besonderheiten, Nutzer" value={search} onChange={e => setSearch(e.target.value)} style={inp} /></div>
           <div style={{ margin: "6px 16px", background: "#fff", borderRadius: 14, padding: 12, border: `1px solid ${T.brd}`, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: T.mut }}>Sortieren nach:</span>
@@ -1058,7 +1058,7 @@ export default function App() {
 
       {/* === ADMIN VIEW === */}
       {view === "admin" && !adminAuth && (
-        <div style={{ flex: 1, overflow: "auto", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ flex: 1, overflow: "auto", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--nav-pad, 0px))" }}>
           <div style={{ width: "100%", maxWidth: 340, padding: 16 }}>
             <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: `1px solid ${T.brd}`, boxShadow: "0 4px 20px rgba(0,0,0,.08)" }}>
               <div style={{ textAlign: "center", marginBottom: 20 }}>
@@ -1090,7 +1090,7 @@ export default function App() {
       )}
 
       {view === "admin" && adminAuth && (
-        <div style={{ flex: 1, overflow: "auto", background: T.bg, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ flex: 1, overflow: "auto", background: T.bg, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--nav-pad, 0px))" }}>
           <div style={{ background: `linear-gradient(135deg,${T.priDk},${T.pri})`, color: "#fff", padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <h2 style={{ margin: 0, fontSize: 18 }}>⚙️ Admin-Panel</h2>
