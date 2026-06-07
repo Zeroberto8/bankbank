@@ -24,7 +24,8 @@ export default function ReloadPrompt() {
     <div
       style={{
         position: "fixed",
-        bottom: 16,
+        // Knapp unter dem Header platziert (statt am unteren Rand).
+        top: "calc(env(safe-area-inset-top, 0px) + 64px)",
         left: 16,
         right: 16,
         zIndex: 1000,
