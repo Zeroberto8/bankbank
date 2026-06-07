@@ -881,10 +881,57 @@ export default function App() {
           {trails.length > 0 && (
             <svg width={mapSize.w} height={mapSize.h} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none", zIndex: 4 }}>
               {trails.map(tr => {
-                const pts = (tr.points || []).map(([lng, lat]) => { const p = geo2px(lat, lng); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(" ");
+                const col = tr.color || "#d62828";
+                const proj = (tr.points || []).map(([lng, lat]) => geo2px(lat, lng));
+                if (proj.length < 2) return null;
+                const ptsStr = proj.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+
+                // Anker für das Label: mittlerer der aktuell sichtbaren Punkte,
+                // damit der Name an der Linie und im Bild bleibt.
+                const visible = [];
+                for (let i = 0; i < proj.length; i++) {
+                  const p = proj[i];
+                  if (p.x >= 0 && p.x <= mapSize.w && p.y >= 0 && p.y <= mapSize.h) visible.push(i);
+                }
+                const anchor = visible.length ? proj[visible[Math.floor(visible.length / 2)]] : null;
+
+                // Schriftgröße + Pfeil skalieren dezent mit dem Zoom.
+                const fs = Math.max(9, Math.min(14, 9 + (zoom - 11)));
+                const off = fs * 1.4;          // Versatz Label ↔ Linie
+                const ax = anchor ? anchor.x + off : 0;
+                const ay = anchor ? anchor.y - off : 0;
+
+                // Kleiner Pfeil vom Label zur Linie.
+                let arrow = null;
+                if (anchor) {
+                  const dx = anchor.x - ax, dy = anchor.y - ay;
+                  const len = Math.hypot(dx, dy) || 1;
+                  const ux = dx / len, uy = dy / len;
+                  const sz = fs * 0.6;          // Pfeilgröße
+                  const bx = anchor.x - ux * sz, by = anchor.y - uy * sz;
+                  const px = -uy, py = ux;
+                  arrow = {
+                    line: { x1: ax, y1: ay, x2: bx, y2: by },
+                    head: `${anchor.x},${anchor.y} ${bx + px * sz * 0.5},${by + py * sz * 0.5} ${bx - px * sz * 0.5},${by - py * sz * 0.5}`,
+                  };
+                }
+
                 return (
-                  <polyline key={tr.id} points={pts} fill="none" stroke={tr.color || "#d62828"}
-                    strokeWidth={4} strokeOpacity={0.85} strokeLinejoin="round" strokeLinecap="round" />
+                  <g key={tr.id}>
+                    <polyline points={ptsStr} fill="none" stroke={col}
+                      strokeWidth={4} strokeOpacity={0.85} strokeLinejoin="round" strokeLinecap="round" />
+                    {anchor && (
+                      <>
+                        <line {...arrow.line} stroke={col} strokeWidth={1} strokeOpacity={0.85} />
+                        <polygon points={arrow.head} fill={col} />
+                        <text x={ax + 3} y={ay} fontSize={fs} fontWeight={600} fill={col}
+                          stroke="#fff" strokeWidth={3} paintOrder="stroke"
+                          dominantBaseline="middle" style={{ fontFamily: "system-ui, sans-serif" }}>
+                          {tr.name}
+                        </text>
+                      </>
+                    )}
+                  </g>
                 );
               })}
             </svg>
