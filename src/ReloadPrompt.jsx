@@ -36,6 +36,9 @@ export default function ReloadPrompt() {
         display: "flex",
         alignItems: "center",
         gap: 12,
+        // Container schluckt keine Touch-/Maus-Events, damit man ueber den
+        // Banner hinweg weiter scrollen kann. Nur der Button reagiert (unten).
+        pointerEvents: "none",
       }}
     >
       <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>
@@ -53,6 +56,8 @@ export default function ReloadPrompt() {
           fontWeight: 700,
           cursor: "pointer",
           whiteSpace: "nowrap",
+          // Button bleibt anklickbar, obwohl der Container Events durchlaesst.
+          pointerEvents: "auto",
         }}
       >
         Aktualisieren
