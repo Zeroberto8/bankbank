@@ -922,7 +922,7 @@ export default function App() {
                       strokeWidth={4} strokeOpacity={0.85} strokeLinejoin="round" strokeLinecap="round" />
                     {anchor && (
                       <>
-                        <line {...arrow.line} stroke={col} strokeWidth={1} strokeOpacity={0.85} />
+                        <line {...arrow.line} stroke={col} strokeWidth={2} strokeOpacity={0.85} />
                         <polygon points={arrow.head} fill={col} />
                         <text x={ax + 3} y={ay} fontSize={fs} fontWeight={600} fill={col}
                           stroke="#fff" strokeWidth={3} paintOrder="stroke"
