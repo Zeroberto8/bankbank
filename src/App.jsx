@@ -273,7 +273,7 @@ export default function App() {
           photo: b.photo_url || null,
           user: b.user_name,
           date: new Date(b.created_at).toISOString().split("T")[0],
-          ratings: cms.map(c => c.rating),
+          ratings: cms.map(c => c.rating).filter(Boolean),
           comments: cms
             .filter(c => c.text || c.photo_url)
             .map(c => ({
@@ -311,7 +311,7 @@ export default function App() {
         const updated = {
           ...bench,
           photo,
-          ratings: data.map(c => c.rating),
+          ratings: data.map(c => c.rating).filter(Boolean),
           comments: data.filter(c => c.text || c.photo_url).map(c => ({
             id: c.id, user: c.user_name, text: c.text,
             rating: c.rating,
@@ -565,7 +565,7 @@ export default function App() {
   // Bewertung/Kommentar zu bestehender Bank hinzufügen
   const addReview = async () => {
     if (revSubmittingRef.current) return;
-    if (!sel || !revUser.trim() || !revRating || !revText.trim() || !revPhoto) return;
+    if (!sel || !revUser.trim() || !revText.trim()) return;
 
     if (containsBadWords(revUser) || containsBadWords(revText)) {
       flash("⚠️ Dein Kommentar enthält unangemessene Begriffe und kann nicht gespeichert werden.");
@@ -594,7 +594,7 @@ export default function App() {
       const { error } = await supabase.from("comments").insert({
         bench_id: sel.id,
         user_name: revUser.trim(),
-        rating: revRating,
+        rating: revRating || null,
         text: revText.trim() || null,
         photo_url: photoUrl,
       });
@@ -910,22 +910,22 @@ export default function App() {
             </div>
             {/* Bewertung & Kommentar abgeben */}
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
-              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Bewertung abgeben</h3>
+              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Kommentar</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Dein Name *</label>
                   <input type="text" placeholder="z.B. Anna M." value={revUser} onChange={e => setRevUser(e.target.value)} style={inp} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Bewertung *</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Bewertung (optional)</label>
                   <Stars rating={revRating} size={28} interactive onRate={setRevRating} />
                 </div>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Kommentar *</label>
-                  <textarea placeholder="Dein Eindruck von dieser Bank..." value={revText} onChange={e => setRevText(e.target.value)} style={{ ...inp, minHeight: 70, resize: "vertical" }} />
+                  <textarea placeholder="Deine Meinung zu dieser Bank ..." value={revText} onChange={e => setRevText(e.target.value)} style={{ ...inp, minHeight: 70, resize: "vertical" }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto *</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto (optional)</label>
                   {revPhoto ? (
                     <div style={{ position: "relative" }}><img src={revPhoto.preview} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
                       <button onClick={() => { if (revPhoto?.preview) URL.revokeObjectURL(revPhoto.preview); setRevPhoto(null); }} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
@@ -937,11 +937,11 @@ export default function App() {
                 </div>
                 <button
                   onClick={addReview}
-                  disabled={!revUser.trim() || !revRating || !revText.trim() || !revPhoto || revSubmitting}
-                  style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: revSubmitting ? "not-allowed" : "pointer", opacity: (!revUser.trim() || !revRating || !revText.trim() || !revPhoto || revSubmitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}
+                  disabled={!revUser.trim() || !revText.trim() || revSubmitting}
+                  style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: revSubmitting ? "not-allowed" : "pointer", opacity: (!revUser.trim() || !revText.trim() || revSubmitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}
                 >
                   {revSubmitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}
-                  {revSubmitting ? "Wird gespeichert..." : "Bewertung absenden ✓"}
+                  {revSubmitting ? "Wird gespeichert..." : "Kommentar absenden"}
                 </button>
               </div>
             </div>
@@ -956,7 +956,7 @@ export default function App() {
               {sel.comments.map((c, i) => (
                 <div key={i} style={{ background: "#fff", borderRadius: 12, padding: 12, border: `1px solid ${T.brd}`, marginBottom: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, fontSize: 13 }}>{c.user}</span><Stars rating={c.rating} size={11} />
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>{c.user}</span>{c.rating ? <Stars rating={c.rating} size={11} /> : null}
                   </div>
                   {c.text && <p style={{ margin: 0, fontSize: 13, color: T.mut }}>{c.text}</p>}
                   {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 300, objectFit: "cover", borderRadius: 10, marginTop: 6, display: "block" }} />}
