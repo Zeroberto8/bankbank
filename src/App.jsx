@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "./lib/supabase";
+import { gpxToPoints } from "./gpx";
 
 const avg = (r) => r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) : "–";
 
@@ -163,6 +164,13 @@ export default function App() {
   const [editComment, setEditComment] = useState(null); // gewählter Kommentar für Bearbeitung
   const [editCommentText, setEditCommentText] = useState("");
   const [editCommentRating, setEditCommentRating] = useState(0);
+  // Wanderwege (GPX-Tracks)
+  const [trails, setTrails] = useState([]);
+  const [trailName, setTrailName] = useState("");
+  const [trailColor, setTrailColor] = useState("#d62828");
+  const [trailPoints, setTrailPoints] = useState(null); // geparste Punkte der gewählten GPX-Datei
+  const [trailFileName, setTrailFileName] = useState("");
+  const [trailSubmitting, setTrailSubmitting] = useState(false);
 
   // Hash-basierter Admin-Zugang: #admin in der URL öffnet das Admin-Panel
   useEffect(() => {
@@ -346,8 +354,15 @@ export default function App() {
     fetchCommentsFor(bench);
   }, [fetchCommentsFor]);
 
+  // Wanderwege laden
+  const fetchTrails = useCallback(async () => {
+    const { data, error } = await supabase.from("trails").select("id, name, color, points");
+    if (!error && data) setTrails(data);
+  }, []);
+
   // Beim Start laden
   useEffect(() => { fetchBenches(); }, [fetchBenches]);
+  useEffect(() => { fetchTrails(); }, [fetchTrails]);
 
   // Deep-Link aus der Tagesbericht-E-Mail: #bank-<id> öffnet direkt die
   // Detailansicht der jeweiligen Bank. Da die Bänke asynchron geladen werden,
@@ -630,6 +645,49 @@ export default function App() {
     fetchBenches();
   };
 
+  // Admin: GPX-Datei einlesen (parsen + ausdünnen)
+  const onTrailFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const pts = gpxToPoints(text);
+      setTrailPoints(pts);
+      setTrailFileName(file.name);
+      if (!trailName.trim()) setTrailName(file.name.replace(/\.gpx$/i, ""));
+      flash(`🥾 GPX gelesen: ${pts.length} Punkte`);
+    } catch (err) {
+      console.error("GPX-Fehler:", err);
+      flash("❌ " + err.message);
+      setTrailPoints(null);
+      setTrailFileName("");
+    }
+  };
+
+  // Admin: Wanderweg speichern
+  const addTrail = async () => {
+    if (!trailName.trim() || !trailPoints) return;
+    setTrailSubmitting(true);
+    const { error } = await supabase.from("trails").insert({
+      name: trailName.trim(),
+      color: trailColor,
+      points: trailPoints,
+    });
+    setTrailSubmitting(false);
+    if (error) { console.error("Fehler beim Speichern des Wegs:", error); flash("Fehler beim Speichern!"); return; }
+    setTrailName(""); setTrailPoints(null); setTrailFileName(""); setTrailColor("#d62828");
+    flash("🥾 Wanderweg gespeichert!");
+    fetchTrails();
+  };
+
+  // Admin: Wanderweg löschen
+  const deleteTrail = async (id) => {
+    const { error } = await supabase.from("trails").delete().eq("id", id);
+    if (error) { flash("Fehler beim Löschen!"); return; }
+    flash("🗑️ Wanderweg gelöscht!");
+    fetchTrails();
+  };
+
   // Admin: Bank bearbeiten
   const updateBench = async () => {
     if (!editBench || !editTitle.trim()) return;
@@ -818,6 +876,19 @@ export default function App() {
               style={{ position: "absolute", left: t.x, top: t.y, width: t.size, height: t.size, pointerEvents: "none", imageRendering: "auto" }}
             />
           ))}
+
+          {/* Wanderwege (GPX-Tracks) als Linien über den Tiles, unter den Pins */}
+          {trails.length > 0 && (
+            <svg width={mapSize.w} height={mapSize.h} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none", zIndex: 4 }}>
+              {trails.map(tr => {
+                const pts = (tr.points || []).map(([lng, lat]) => { const p = geo2px(lat, lng); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(" ");
+                return (
+                  <polyline key={tr.id} points={pts} fill="none" stroke={tr.color || "#d62828"}
+                    strokeWidth={4} strokeOpacity={0.85} strokeLinejoin="round" strokeLinecap="round" />
+                );
+              })}
+            </svg>
+          )}
 
           {/* Bench pins */}
           {benches.map(b => {
@@ -1136,6 +1207,40 @@ export default function App() {
                 {emailSending ? "Sendet..." : "Test senden"}
               </button>
             </div>
+          </div>
+
+          {/* Wanderwege (GPX) verwalten */}
+          <div style={{ margin: "12px 16px", background: "#fff", borderRadius: 14, padding: 14, border: `1px solid ${T.brd}` }}>
+            <h3 style={{ margin: "0 0 2px", fontSize: 14 }}>🥾 Wanderwege</h3>
+            <p style={{ margin: "0 0 10px", fontSize: 11, color: T.mut }}>GPX-Datei hochladen – der Track wird auf der Karte angezeigt.</p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", border: `2px dashed ${T.brd}`, borderRadius: 10, cursor: "pointer", color: T.mut, fontSize: 13 }}>
+                <span style={{ fontSize: 18 }}>📂</span>{trailFileName || "GPX-Datei wählen"}
+                <input type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" onChange={onTrailFile} style={{ display: "none" }} />
+              </label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input type="text" placeholder="Name des Wegs" value={trailName} onChange={e => setTrailName(e.target.value)} style={{ ...inp, flex: 1 }} />
+                <input type="color" value={trailColor} onChange={e => setTrailColor(e.target.value)} title="Farbe" style={{ width: 42, height: 42, padding: 0, border: `1px solid ${T.brd}`, borderRadius: 10, background: "#fff", cursor: "pointer", flexShrink: 0 }} />
+              </div>
+              <button onClick={addTrail} disabled={!trailName.trim() || !trailPoints || trailSubmitting}
+                style={{ padding: 10, borderRadius: 10, border: "none", background: T.pri, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: (!trailName.trim() || !trailPoints || trailSubmitting) ? .5 : 1 }}>
+                {trailSubmitting ? "Speichert..." : "Wanderweg hinzufügen"}
+              </button>
+            </div>
+
+            {trails.length > 0 && (
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                {trails.map(tr => (
+                  <div key={tr.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, background: T.bg }}>
+                    <span style={{ width: 14, height: 14, borderRadius: "50%", background: tr.color || "#d62828", flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.name}</span>
+                    <span style={{ fontSize: 10, color: T.mut }}>{(tr.points || []).length} Pkt.</span>
+                    <button onClick={() => deleteTrail(tr.id)} style={{ background: "none", border: "none", color: "#dc3545", fontSize: 16, cursor: "pointer", padding: "0 4px" }}>🗑️</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Edit-Modal */}
