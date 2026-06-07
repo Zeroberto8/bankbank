@@ -908,9 +908,31 @@ export default function App() {
               <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Beschreibung</h3>
               <p style={{ margin: 0, fontSize: 13, color: T.mut, lineHeight: 1.5 }}>{sel.description}</p>
             </div>
-            {/* Bewertung & Kommentar abgeben */}
+            {detailLoading && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16 }}>
+                <div style={{ width: 16, height: 16, border: `2px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                <span style={{ fontSize: 13, color: T.mut }}>Bewertungen laden...</span>
+              </div>
+            )}
+            {!detailLoading && sel.comments.length > 0 && <div>
+              <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Kommentare ({sel.comments.length})</h3>
+              {sel.comments.map((c, i) => (
+                <div key={i} style={{ background: "#fff", borderRadius: 12, padding: 12, border: `1px solid ${T.brd}`, marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>{c.user}</span>{c.rating ? <Stars rating={c.rating} size={11} /> : null}
+                  </div>
+                  {c.text && <p style={{ margin: 0, fontSize: 13, color: T.mut }}>{c.text}</p>}
+                  {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 300, objectFit: "cover", borderRadius: 10, marginTop: 6, display: "block" }} />}
+                  <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
+                </div>
+              ))}
+            </div>}
+            {!detailLoading && sel.comments.length === 0 && sel.ratings.length === 0 && (
+              <p style={{ fontSize: 13, color: T.mut, textAlign: "center", padding: 8 }}>Noch keine Bewertungen</p>
+            )}
+            {/* Neuen Kommentar abgeben */}
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
-              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Kommentar</h3>
+              <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Kommentar abgeben</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Dein Name *</label>
@@ -945,28 +967,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {detailLoading && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16 }}>
-                <div style={{ width: 16, height: 16, border: `2px solid ${T.brd}`, borderTopColor: T.pri, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                <span style={{ fontSize: 13, color: T.mut }}>Bewertungen laden...</span>
-              </div>
-            )}
-            {!detailLoading && sel.comments.length > 0 && <div>
-              <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Kommentare ({sel.comments.length})</h3>
-              {sel.comments.map((c, i) => (
-                <div key={i} style={{ background: "#fff", borderRadius: 12, padding: 12, border: `1px solid ${T.brd}`, marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, fontSize: 13 }}>{c.user}</span>{c.rating ? <Stars rating={c.rating} size={11} /> : null}
-                  </div>
-                  {c.text && <p style={{ margin: 0, fontSize: 13, color: T.mut }}>{c.text}</p>}
-                  {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 300, objectFit: "cover", borderRadius: 10, marginTop: 6, display: "block" }} />}
-                  <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
-                </div>
-              ))}
-            </div>}
-            {!detailLoading && sel.comments.length === 0 && sel.ratings.length === 0 && (
-              <p style={{ fontSize: 13, color: T.mut, textAlign: "center", padding: 8 }}>Noch keine Bewertungen</p>
-            )}
           </div>
         </div>
       )}
