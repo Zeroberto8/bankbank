@@ -151,7 +151,7 @@ const PhotoPicker = ({ photos, onAdd, onRemove }) => (
       {photos.length < MAX_PHOTOS && (
         <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 90, border: `2px dashed ${T.brd}`, borderRadius: 12, cursor: "pointer", color: T.mut, fontSize: 12, gap: 2, textAlign: "center" }}>
           <span style={{ fontSize: 22 }}>📷</span>{photos.length ? "Weiteres Foto" : "Foto aufnehmen"}
-          <span style={{ fontSize: 10 }}>{photos.length}/{MAX_PHOTOS}</span>
+          <span style={{ fontSize: 10 }}>{photos.length + 1}/{MAX_PHOTOS}</span>
           <input type="file" accept="image/*" capture="environment" multiple onChange={onAdd} style={{ display: "none" }} /></label>
       )}
     </div>
