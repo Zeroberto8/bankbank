@@ -174,6 +174,10 @@ const sendOutboxItem = async (item) => {
   if (item.key != null) await outboxDelete(item.key);
 };
 
+// Admin-Rechte stehen in app_metadata.role – das kann nur per SQL gesetzt
+// werden, nicht vom Nutzer selbst. Dieselbe Prüfung macht die Datenbank (is_admin()).
+const isAdminSession = (session) => session?.user?.app_metadata?.role === "admin";
+
 const OFFLINE_MSG = "📴 Kein Empfang – gespeichert. Wird automatisch hochgeladen, sobald wieder Netz da ist.";
 
 // Datensatz aus Supabase ins App-Format bringen
@@ -257,6 +261,7 @@ export default function App() {
   const [adminUser, setAdminUser] = useState("");
   const [adminPass, setAdminPass] = useState("");
   const [adminError, setAdminError] = useState("");
+  const [adminLoggingIn, setAdminLoggingIn] = useState(false);
   const [editBench, setEditBench] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -281,6 +286,34 @@ export default function App() {
   const benchesLoadedRef = useRef(false);
   const selRef = useRef(null);
   selRef.current = sel;
+
+  // Admin-Login über Supabase Auth: das Passwort wird nur auf dem Server geprüft.
+  // Eine bestehende Anmeldung bleibt nach dem Neuladen erhalten.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setAdminAuth(isAdminSession(data.session)));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setAdminAuth(isAdminSession(session)));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const adminLogin = async () => {
+    if (adminLoggingIn || !adminUser.trim() || !adminPass) return;
+    setAdminLoggingIn(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: adminUser.trim(), password: adminPass });
+    setAdminLoggingIn(false);
+    if (error) { setAdminError("Falsche Zugangsdaten"); return; }
+    if (!isAdminSession(data.session)) {
+      await supabase.auth.signOut();
+      setAdminError("Dieses Konto hat keine Admin-Rechte");
+      return;
+    }
+    setAdminPass(""); setAdminError("");
+  };
+
+  const adminLogout = async () => {
+    await supabase.auth.signOut();
+    setAdminUser(""); setAdminPass(""); setView("map");
+    window.history.replaceState(null, "", window.location.pathname);
+  };
 
   // Hash-basierter Admin-Zugang: #admin in der URL öffnet das Admin-Panel
   useEffect(() => {
@@ -1331,22 +1364,18 @@ export default function App() {
               </div>
               <button onClick={() => { setView("map"); window.history.replaceState(null, "", window.location.pathname); }} style={{ ...bk, background: "rgba(0,0,0,.06)", color: T.mut, marginBottom: 16, width: "100%", textAlign: "center" }}>← Zurück zur Karte</button>
               <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Benutzer</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>E-Mail</label>
                 <input type="email" placeholder="E-Mail-Adresse" value={adminUser} onChange={e => { setAdminUser(e.target.value); setAdminError(""); }} style={inp} />
               </div>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Passwort</label>
                 <input type="password" placeholder="Passwort" value={adminPass}
                   onChange={e => { setAdminPass(e.target.value); setAdminError(""); }}
-                  onKeyDown={e => { if (e.key === "Enter") { if (adminUser === import.meta.env.VITE_ADMIN_USER && adminPass === import.meta.env.VITE_ADMIN_PASS) { setAdminAuth(true); setAdminError(""); } else { setAdminError("Falsche Zugangsdaten"); } } }}
+                  onKeyDown={e => { if (e.key === "Enter") adminLogin(); }}
                   style={inp} />
               </div>
               {adminError && <p style={{ margin: "0 0 10px", fontSize: 12, color: "#dc3545", textAlign: "center" }}>{adminError}</p>}
-              <button onClick={() => {
-                if (adminUser === import.meta.env.VITE_ADMIN_USER && adminPass === import.meta.env.VITE_ADMIN_PASS) {
-                  setAdminAuth(true); setAdminError("");
-                } else { setAdminError("Falsche Zugangsdaten"); }
-              }} style={{ width: "100%", padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Anmelden</button>
+              <button onClick={adminLogin} disabled={adminLoggingIn} style={{ width: "100%", padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: adminLoggingIn ? .6 : 1 }}>{adminLoggingIn ? "Anmelden..." : "Anmelden"}</button>
             </div>
           </div>
         </div>
@@ -1360,7 +1389,7 @@ export default function App() {
               <p style={{ margin: "4px 0 0", fontSize: 11, opacity: .75 }}>{benches.length} Bänke verwalten</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { setAdminAuth(false); setAdminUser(""); setAdminPass(""); setView("map"); window.history.replaceState(null, "", window.location.pathname); }}
+              <button onClick={adminLogout}
                 style={{ background: "rgba(255,255,255,.2)", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer" }}>Abmelden</button>
             </div>
           </div>
