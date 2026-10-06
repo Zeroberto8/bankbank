@@ -33,6 +33,26 @@ Deno.serve(async (req) => {
     // Supabase-Client mit Service-Role-Key (darf alles lesen)
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Nur der Cron-Job (mit Geheimnis aus dem Vault, s. secure-daily-report.sql)
+    // oder ein angemeldeter Admin darf den Bericht auslösen
+    let authorized = false;
+    const cronSecret = req.headers.get("x-cron-secret");
+    if (cronSecret) {
+      const { data } = await supabase.rpc("check_report_secret", { secret: cronSecret });
+      authorized = data === true;
+    }
+    const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!authorized && token) {
+      const { data } = await supabase.auth.getUser(token);
+      authorized = data.user?.app_metadata?.role === "admin";
+    }
+    if (!authorized) {
+      return new Response(
+        JSON.stringify({ error: "Nicht berechtigt" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Body parsen: { test: true } -> Test-Modus (Vorschau, kein State-Update)
     let isTestMode = false;
     try {

@@ -1405,10 +1405,13 @@ export default function App() {
                 onClick={async () => {
                   setEmailSending(true);
                   try {
+                    // Mit dem Token der Admin-Anmeldung – die Funktion prüft die Admin-Rolle
+                    const { data: { session } } = await supabase.auth.getSession();
                     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/daily-bench-report`, {
                       method: "POST",
                       headers: {
-                        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                        "Authorization": `Bearer ${session?.access_token}`,
+                        "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
                         "Content-Type": "application/json",
                       },
                       body: JSON.stringify({ test: true }),
