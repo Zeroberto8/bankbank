@@ -18,6 +18,10 @@ Deno.serve(async (req) => {
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const notificationEmail =
       Deno.env.get("NOTIFICATION_EMAIL") || "ralf.kroell@gmx.de";
+    // Basis-URL der App für anklickbare Links in der E-Mail. Per Env-Var
+    // überschreibbar; Fallback ist die Produktions-URL auf Vercel.
+    const appUrl = (Deno.env.get("APP_URL") || "https://bankbank-eight.vercel.app")
+      .replace(/\/+$/, "");
 
     if (!resendApiKey) {
       return new Response(
@@ -106,11 +110,12 @@ Deno.serve(async (req) => {
     );
 
     // Gruppieren nach Bank
-    const grouped: Record<string, { title: string; items: any[] }> = {};
+    const grouped: Record<string, { id: any; title: string; items: any[] }> = {};
     for (const c of otherComments) {
       const key = String(c.bench_id);
       if (!grouped[key]) {
         grouped[key] = {
+          id: c.bench_id,
           title: c.benches?.title || `Bank #${c.bench_id}`,
           items: [],
         };
@@ -159,16 +164,20 @@ Deno.serve(async (req) => {
           timeZone: "Europe/Berlin",
         });
 
+        const benchUrl = `${appUrl}/#bank-${b.id}`;
         benchListHtml += `
-          <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid #E8E0D4;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-              <h3 style="margin:0 0 4px;font-size:16px;color:#2C2416;">🪑 ${b.title}</h3>
-              <span style="font-size:12px;color:#8C7E6A;white-space:nowrap;">${time} Uhr</span>
+          <a href="${benchUrl}" style="text-decoration:none;color:inherit;display:block;">
+            <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid #E8E0D4;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <h3 style="margin:0 0 4px;font-size:16px;color:#2C2416;">🪑 ${b.title}</h3>
+                <span style="font-size:12px;color:#8C7E6A;white-space:nowrap;">${time} Uhr</span>
+              </div>
+              <div style="font-size:13px;color:#E8A838;margin-bottom:4px;">${stars} <span style="color:#8C7E6A;font-size:11px;">${avg}</span></div>
+              ${b.description ? `<p style="margin:4px 0 0;font-size:13px;color:#8C7E6A;line-height:1.4;">${b.description}</p>` : ""}
+              <p style="margin:6px 0 0;font-size:11px;color:#8C7E6A;">📍 ${Number(b.lat).toFixed(4)}, ${Number(b.lng).toFixed(4)} · von ${b.user_name || "Anonym"}</p>
+              <p style="margin:8px 0 0;font-size:12px;color:#4A7C28;font-weight:600;">In der App öffnen →</p>
             </div>
-            <div style="font-size:13px;color:#E8A838;margin-bottom:4px;">${stars} <span style="color:#8C7E6A;font-size:11px;">${avg}</span></div>
-            ${b.description ? `<p style="margin:4px 0 0;font-size:13px;color:#8C7E6A;line-height:1.4;">${b.description}</p>` : ""}
-            <p style="margin:6px 0 0;font-size:11px;color:#8C7E6A;">📍 ${Number(b.lat).toFixed(4)}, ${Number(b.lng).toFixed(4)} · von ${b.user_name || "Anonym"}</p>
-          </div>`;
+          </a>`;
       }
     }
 
@@ -201,10 +210,13 @@ Deno.serve(async (req) => {
               <span style="font-size:10px;color:#8C7E6A;">${time}</span>
             </div>`;
         }
+        const groupUrl = `${appUrl}/#bank-${g.id}`;
         commentsHtml += `
           <div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #E8E0D4;">
-            <h3 style="margin:0 0 4px;font-size:14px;color:#2C2416;">💬 ${g.title}</h3>
-            <p style="margin:0;font-size:11px;color:#8C7E6A;">${g.items.length} ${g.items.length === 1 ? "neuer Eintrag" : "neue Einträge"}</p>
+            <a href="${groupUrl}" style="text-decoration:none;color:inherit;display:block;">
+              <h3 style="margin:0 0 4px;font-size:14px;color:#2C2416;">💬 ${g.title} <span style="font-size:12px;color:#4A7C28;font-weight:600;">→</span></h3>
+              <p style="margin:0;font-size:11px;color:#8C7E6A;">${g.items.length} ${g.items.length === 1 ? "neuer Eintrag" : "neue Einträge"}</p>
+            </a>
             ${itemsHtml}
           </div>`;
       }
