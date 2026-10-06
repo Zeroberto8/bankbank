@@ -117,6 +117,46 @@ const compressImage = (file) =>
     img.src = URL.createObjectURL(file);
   });
 
+const MAX_PHOTOS = 5;
+
+// Alle Foto-URLs eines Datensatzes (photo_urls; ältere Einträge haben nur photo_url)
+const photoList = (row) =>
+  row?.photo_urls?.length ? row.photo_urls : (row?.photo_url ? [row.photo_url] : []);
+
+// Fotos parallel in Supabase Storage hochladen, liefert die öffentlichen URLs
+const uploadPhotos = async (photos) => {
+  const urls = await Promise.all(photos.map(async (p) => {
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+    const { error } = await supabase.storage
+      .from("bench-photos")
+      .upload(fileName, p.blob, { contentType: "image/jpeg", cacheControl: "31536000" });
+    if (error) {
+      console.error("Foto-Upload fehlgeschlagen:", error);
+      return null;
+    }
+    return supabase.storage.from("bench-photos").getPublicUrl(fileName).data.publicUrl;
+  }));
+  return urls.filter(Boolean);
+};
+
+// Auswahl von bis zu MAX_PHOTOS Fotos mit Vorschau-Kacheln
+const PhotoPicker = ({ photos, onAdd, onRemove }) => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+      {photos.map((p, i) => (
+        <div key={p.preview} style={{ position: "relative" }}>
+          <img src={p.preview} alt="" style={{ width: "100%", height: 90, objectFit: "cover", borderRadius: 12, display: "block" }} />
+          <button onClick={() => onRemove(i)} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 24, height: 24, borderRadius: "50%", cursor: "pointer" }}>×</button>
+        </div>
+      ))}
+      {photos.length < MAX_PHOTOS && (
+        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 90, border: `2px dashed ${T.brd}`, borderRadius: 12, cursor: "pointer", color: T.mut, fontSize: 12, gap: 2, textAlign: "center" }}>
+          <span style={{ fontSize: 22 }}>📷</span>{photos.length ? "Weiteres Foto" : "Foto aufnehmen"}
+          <span style={{ fontSize: 10 }}>{photos.length}/{MAX_PHOTOS}</span>
+          <input type="file" accept="image/*" capture="environment" multiple onChange={onAdd} style={{ display: "none" }} /></label>
+      )}
+    </div>
+);
+
 // Mercator projection helpers
 const lat2world = (lat) => {
   const r = lat * Math.PI / 180;
@@ -134,7 +174,7 @@ export default function App() {
   const [newPos, setNewPos] = useState(null);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
-  const [newPhoto, setNewPhoto] = useState(null);
+  const [newPhotos, setNewPhotos] = useState([]);
   const [newRating, setNewRating] = useState(0);
   const [newUser, setNewUser] = useState(() => localStorage.getItem("bankbank_user") || "");
   const [search, setSearch] = useState("");
@@ -147,7 +187,7 @@ export default function App() {
   const [revText, setRevText] = useState("");
   const [revUser, setRevUser] = useState(() => localStorage.getItem("bankbank_user") || "");
   const [revSubmitting, setRevSubmitting] = useState(false);
-  const [revPhoto, setRevPhoto] = useState(null);
+  const [revPhotos, setRevPhotos] = useState([]);
   const revSubmittingRef = useRef(false);
   // Admin state
   const [adminAuth, setAdminAuth] = useState(false);
@@ -267,7 +307,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("benches")
-        .select("id, title, description, lat, lng, user_name, created_at, photo_url, comments(id, user_name, rating, text, created_at, photo_url)")
+        .select("id, title, description, lat, lng, user_name, created_at, photo_url, photo_urls, comments(id, user_name, rating, text, created_at, photo_url, photo_urls)")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -278,18 +318,20 @@ export default function App() {
           id: b.id, lat: b.lat, lng: b.lng,
           title: b.title,
           description: b.description || "",
-          photo: b.photo_url || null,
+          photo: photoList(b)[0] || null,
+          photos: photoList(b),
           user: b.user_name,
           date: new Date(b.created_at).toISOString().split("T")[0],
           ratings: cms.map(c => c.rating).filter(Boolean),
           comments: cms
-            .filter(c => c.text || c.photo_url)
+            .filter(c => c.text || photoList(c).length)
             .map(c => ({
               id: c.id,
               user: c.user_name,
               text: c.text,
               rating: c.rating,
-              photo: c.photo_url || null,
+              photo: photoList(c)[0] || null,
+              photos: photoList(c),
               date: new Date(c.created_at).toISOString().split("T")[0],
             })),
         };
@@ -308,22 +350,24 @@ export default function App() {
     try {
       // Kommentare und Foto parallel laden
       const [commentsRes, photoRes] = await Promise.all([
-        supabase.from("comments").select("id, user_name, text, rating, created_at, photo_url").eq("bench_id", bench.id),
-        bench.photo ? Promise.resolve(null) : supabase.from("benches").select("photo_url").eq("id", bench.id).single(),
+        supabase.from("comments").select("id, user_name, text, rating, created_at, photo_url, photo_urls").eq("bench_id", bench.id),
+        bench.photos?.length ? Promise.resolve(null) : supabase.from("benches").select("photo_url, photo_urls").eq("id", bench.id).single(),
       ]);
 
       const data = commentsRes.data;
-      const photo = bench.photo || photoRes?.data?.photo_url || null;
+      const photos = bench.photos?.length ? bench.photos : photoList(photoRes?.data);
 
       if (!commentsRes.error && data) {
         const updated = {
           ...bench,
-          photo,
+          photo: photos[0] || null,
+          photos,
           ratings: data.map(c => c.rating).filter(Boolean),
-          comments: data.filter(c => c.text || c.photo_url).map(c => ({
+          comments: data.filter(c => c.text || photoList(c).length).map(c => ({
             id: c.id, user: c.user_name, text: c.text,
             rating: c.rating,
-            photo: c.photo_url || null,
+            photo: photoList(c)[0] || null,
+            photos: photoList(c),
             date: new Date(c.created_at).toISOString().split("T")[0],
           })),
         };
@@ -508,7 +552,7 @@ export default function App() {
 
   const addBench = async () => {
     if (submittingRef.current) return;
-    if (!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhoto) return;
+    if (!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhotos.length) return;
 
     // Inhaltsmoderation
     if (containsBadWords(newTitle) || containsBadWords(newDesc) || containsBadWords(newUser)) {
@@ -520,21 +564,8 @@ export default function App() {
     setSubmitting(true);
 
     try {
-      // Foto in Supabase Storage hochladen (falls vorhanden)
-      let photoUrl = null;
-      if (newPhoto?.blob) {
-        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-        const { error: uploadError } = await supabase.storage
-          .from("bench-photos")
-          .upload(fileName, newPhoto.blob, { contentType: "image/jpeg", cacheControl: "31536000" });
-
-        if (uploadError) {
-          console.error("Foto-Upload fehlgeschlagen:", uploadError);
-        } else {
-          const { data: urlData } = supabase.storage.from("bench-photos").getPublicUrl(fileName);
-          photoUrl = urlData.publicUrl;
-        }
-      }
+      // Fotos in Supabase Storage hochladen
+      const photoUrls = await uploadPhotos(newPhotos);
 
       const { data, error } = await supabase
         .from("benches")
@@ -543,7 +574,8 @@ export default function App() {
           description: newDesc.trim() || null,
           lat: newPos.lat,
           lng: newPos.lng,
-          photo_url: photoUrl,
+          photo_url: photoUrls[0] || null,
+          photo_urls: photoUrls,
           user_name: newUser.trim(),
         })
         .select()
@@ -564,8 +596,8 @@ export default function App() {
       });
 
       localStorage.setItem("bankbank_user", newUser.trim());
-      if (newPhoto?.preview) URL.revokeObjectURL(newPhoto.preview);
-      setNewTitle(""); setNewDesc(""); setNewPhoto(null); setNewRating(0); setNewPos(null); setView("map");
+      newPhotos.forEach(p => URL.revokeObjectURL(p.preview));
+      setNewTitle(""); setNewDesc(""); setNewPhotos([]); setNewRating(0); setNewPos(null); setView("map");
       flash("🪑 Bank hinzugefügt!");
       fetchBenches();
     } catch (e) {
@@ -590,28 +622,16 @@ export default function App() {
     revSubmittingRef.current = true;
     setRevSubmitting(true);
     try {
-      // Foto in Supabase Storage hochladen (falls vorhanden)
-      let photoUrl = null;
-      if (revPhoto?.blob) {
-        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-        const { error: uploadError } = await supabase.storage
-          .from("bench-photos")
-          .upload(fileName, revPhoto.blob, { contentType: "image/jpeg", cacheControl: "31536000" });
-
-        if (uploadError) {
-          console.error("Foto-Upload fehlgeschlagen:", uploadError);
-        } else {
-          const { data: urlData } = supabase.storage.from("bench-photos").getPublicUrl(fileName);
-          photoUrl = urlData.publicUrl;
-        }
-      }
+      // Fotos in Supabase Storage hochladen (falls vorhanden)
+      const photoUrls = await uploadPhotos(revPhotos);
 
       const { error } = await supabase.from("comments").insert({
         bench_id: sel.id,
         user_name: revUser.trim(),
         rating: revRating || null,
         text: revText.trim() || null,
-        photo_url: photoUrl,
+        photo_url: photoUrls[0] || null,
+        photo_urls: photoUrls,
       });
       if (error) {
         console.error("Fehler beim Speichern der Bewertung:", error);
@@ -621,8 +641,8 @@ export default function App() {
       localStorage.setItem("bankbank_user", revUser.trim());
       setRevRating(0);
       setRevText("");
-      if (revPhoto?.preview) URL.revokeObjectURL(revPhoto.preview);
-      setRevPhoto(null);
+      revPhotos.forEach(p => URL.revokeObjectURL(p.preview));
+      setRevPhotos([]);
       flash("⭐ Bewertung gespeichert!");
       // Detail neu laden, damit Mittelwert + Liste aktuell sind
       await fetchCommentsFor(sel);
@@ -722,31 +742,30 @@ export default function App() {
     fetchBenches();
   };
 
-  const onPhoto = async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    try {
-      const blob = await compressImage(f);
-      const preview = URL.createObjectURL(blob);
-      setNewPhoto({ blob, preview });
-    } catch (err) {
-      console.error("Foto-Komprimierung fehlgeschlagen:", err);
-      flash("Foto konnte nicht verarbeitet werden.");
+  // Ausgewählte Dateien komprimieren und an die Liste anhängen (max. MAX_PHOTOS)
+  const addPhotos = (current, setPhotos) => async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    const free = MAX_PHOTOS - current.length;
+    if (files.length > free) flash(`Maximal ${MAX_PHOTOS} Fotos möglich.`);
+    for (const f of files.slice(0, Math.max(free, 0))) {
+      try {
+        const blob = await compressImage(f);
+        const preview = URL.createObjectURL(blob);
+        setPhotos(prev => prev.length < MAX_PHOTOS ? [...prev, { blob, preview }] : prev);
+      } catch (err) {
+        console.error("Foto-Komprimierung fehlgeschlagen:", err);
+        flash("Foto konnte nicht verarbeitet werden.");
+      }
     }
   };
 
-  const onRevPhoto = async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    try {
-      const blob = await compressImage(f);
-      const preview = URL.createObjectURL(blob);
-      setRevPhoto({ blob, preview });
-    } catch (err) {
-      console.error("Foto-Komprimierung fehlgeschlagen:", err);
-      flash("Foto konnte nicht verarbeitet werden.");
-    }
-  };
+  const removePhoto = (setPhotos) => (i) =>
+    setPhotos(prev => {
+      URL.revokeObjectURL(prev[i].preview);
+      return prev.filter((_, j) => j !== i);
+    });
 
   const filtered = (() => {
     const q = search.trim().toLowerCase();
@@ -1019,7 +1038,7 @@ export default function App() {
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 11, opacity: .7 }}>📍 von {sel.user} · {sel.date}</p>
           </div>
-          {sel.photo && <div style={{ margin: "0 16px", marginTop: -14 }}><img src={sel.photo} alt="" style={{ width: "100%", height: "auto", maxHeight: 420, objectFit: "cover", display: "block", borderRadius: 16 }} /></div>}
+          {sel.photos?.length > 0 && <div style={{ margin: "0 16px", marginTop: -14, display: "flex", flexDirection: "column", gap: 8 }}>{sel.photos.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 420, objectFit: "cover", display: "block", borderRadius: 16 }} />)}</div>}
           <div style={{ padding: 16 }}>
             <button onClick={() => { setCLat(sel.lat); setCLng(sel.lng); setZoom(17); goHome(); }} style={{ display: "block", width: "100%", padding: "12px 16px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>📍 Zeige in der Karte</button>
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
@@ -1040,7 +1059,7 @@ export default function App() {
                     <span style={{ fontWeight: 700, fontSize: 13 }}>{c.user}</span>{c.rating ? <Stars rating={c.rating} size={11} /> : null}
                   </div>
                   {c.text && <p style={{ margin: 0, fontSize: 13, color: T.mut }}>{c.text}</p>}
-                  {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 300, objectFit: "cover", borderRadius: 10, marginTop: 6, display: "block" }} />}
+                  {c.photos?.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 300, objectFit: "cover", borderRadius: 10, marginTop: 6, display: "block" }} />)}
                   <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
                 </div>
               ))}
@@ -1065,15 +1084,8 @@ export default function App() {
                   <textarea placeholder="Deine Meinung zu dieser Bank ..." value={revText} onChange={e => setRevText(e.target.value)} style={{ ...inp, minHeight: 70, resize: "vertical" }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto (optional)</label>
-                  {revPhoto ? (
-                    <div style={{ position: "relative" }}><img src={revPhoto.preview} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
-                      <button onClick={() => { if (revPhoto?.preview) URL.revokeObjectURL(revPhoto.preview); setRevPhoto(null); }} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
-                  ) : (
-                    <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 80, border: `2px dashed ${T.brd}`, borderRadius: 12, cursor: "pointer", color: T.mut, fontSize: 13, gap: 4 }}>
-                      <span style={{ fontSize: 24 }}>📷</span>Foto aufnehmen
-                      <input type="file" accept="image/*" capture="environment" onChange={onRevPhoto} style={{ display: "none" }} /></label>
-                  )}
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Fotos (optional, max. {MAX_PHOTOS})</label>
+                  <PhotoPicker photos={revPhotos} onAdd={addPhotos(revPhotos, setRevPhotos)} onRemove={removePhoto(setRevPhotos)} />
                 </div>
                 <button
                   onClick={addReview}
@@ -1119,18 +1131,11 @@ export default function App() {
               <input type="text" placeholder="z.B. Sonnenbank am See" value={newTitle} onChange={e => setNewTitle(e.target.value)} style={inp} /></div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Beschreibung *</label>
               <textarea placeholder="Was macht sie besonders?" value={newDesc} onChange={e => setNewDesc(e.target.value)} style={{ ...inp, minHeight: 60, resize: "vertical" }} /></div>
-            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Foto *</label>
-              {newPhoto ? (
-                <div style={{ position: "relative" }}><img src={newPhoto.preview} alt="" style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12 }} />
-                  <button onClick={() => { if (newPhoto?.preview) URL.revokeObjectURL(newPhoto.preview); setNewPhoto(null); }} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,.6)", color: "#fff", border: "none", width: 26, height: 26, borderRadius: "50%", cursor: "pointer" }}>×</button></div>
-              ) : (
-                <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 80, border: `2px dashed ${T.brd}`, borderRadius: 12, cursor: "pointer", color: T.mut, fontSize: 13, gap: 4 }}>
-                  <span style={{ fontSize: 24 }}>📷</span>Foto aufnehmen
-                  <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} /></label>
-              )}</div>
+            <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Fotos * (max. {MAX_PHOTOS})</label>
+              <PhotoPicker photos={newPhotos} onAdd={addPhotos(newPhotos, setNewPhotos)} onRemove={removePhoto(setNewPhotos)} /></div>
             <div><label style={{ fontSize: 12, fontWeight: 600, color: T.mut, marginBottom: 4, display: "block" }}>Bewertung *</label>
               <Stars rating={newRating} size={28} interactive onRate={setNewRating} /></div>
-            <button onClick={addBench} disabled={!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhoto || submitting} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: (!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhoto || submitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>{submitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}{submitting ? "Wird gespeichert..." : "Eintragen ✓"}</button>
+            <button onClick={addBench} disabled={!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhotos.length || submitting} style={{ padding: 12, borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 14, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: (!newTitle.trim() || !newUser.trim() || !newPos || !newRating || !newDesc.trim() || !newPhotos.length || submitting) ? .5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>{submitting && <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}{submitting ? "Wird gespeichert..." : "Eintragen ✓"}</button>
           </div>
         </div>
       )}
@@ -1321,10 +1326,10 @@ export default function App() {
                   style={{ background: "rgba(0,0,0,.06)", border: "none", color: T.txt, padding: "6px 14px", borderRadius: 16, fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>
                   ← Zurück zur Liste
                 </button>
-                {b.photo && (
-                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                {b.photos?.map(url => (
+                  <div key={url} style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
                     <img
-                      src={b.photo}
+                      src={url}
                       alt=""
                       style={{
                         maxWidth: "100%",
@@ -1336,7 +1341,7 @@ export default function App() {
                       }}
                     />
                   </div>
-                )}
+                ))}
                 <h2 style={{ margin: "0 0 6px", fontSize: 20 }}>{b.title}</h2>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                   <Stars rating={Math.round(parseFloat(avg(b.ratings)))} size={18} />
@@ -1362,7 +1367,7 @@ export default function App() {
                             <Stars rating={editCommentRating} size={22} interactive onRate={setEditCommentRating} />
                             <textarea value={editCommentText} onChange={e => setEditCommentText(e.target.value)} rows={3}
                               style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 16, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", resize: "vertical" }} />
-                            {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, display: "block" }} />}
+                            {c.photos?.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, display: "block" }} />)}
                             <div style={{ display: "flex", gap: 8 }}>
                               <button onClick={() => { setEditComment(null); setEditCommentText(""); setEditCommentRating(0); }}
                                 style={{ flex: 1, padding: 8, borderRadius: 10, border: `1px solid ${T.brd}`, background: "#fff", color: T.txt, fontSize: 12, cursor: "pointer" }}>Abbrechen</button>
@@ -1377,7 +1382,7 @@ export default function App() {
                               <Stars rating={c.rating} size={11} />
                             </div>
                             {c.text && <p style={{ margin: 0, fontSize: 12, color: T.txt, lineHeight: 1.4 }}>{c.text}</p>}
-                            {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, marginTop: 6, display: "block" }} />}
+                            {c.photos?.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, marginTop: 6, display: "block" }} />)}
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
                               <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
                               <div style={{ display: "flex", gap: 6 }}>
@@ -1451,7 +1456,7 @@ export default function App() {
                           <Stars rating={c.rating} size={10} />
                         </div>
                         {c.text && <p style={{ margin: 0, fontSize: 11, color: T.mut, lineHeight: 1.4 }}>{c.text}</p>}
-                        {c.photo && <img src={c.photo} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 180, objectFit: "cover", borderRadius: 6, marginTop: 4, display: "block" }} />}
+                        {c.photos?.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 180, objectFit: "cover", borderRadius: 6, marginTop: 4, display: "block" }} />)}
                         <span style={{ fontSize: 9, color: T.mut }}>{c.date}</span>
                       </div>
                     ))}
