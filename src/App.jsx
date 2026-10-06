@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "./lib/supabase";
 import { gpxToPoints } from "./gpx";
+import { outboxAdd, outboxPut, outboxDelete, outboxAll, cacheGet, cacheSet } from "./offline";
 
 const avg = (r) => r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) : "–";
 
@@ -123,20 +124,82 @@ const MAX_PHOTOS = 5;
 const photoList = (row) =>
   row?.photo_urls?.length ? row.photo_urls : (row?.photo_url ? [row.photo_url] : []);
 
-// Fotos parallel in Supabase Storage hochladen, liefert die öffentlichen URLs
-const uploadPhotos = async (photos) => {
-  const urls = await Promise.all(photos.map(async (p) => {
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-    const { error } = await supabase.storage
-      .from("bench-photos")
-      .upload(fileName, p.blob, { contentType: "image/jpeg", cacheControl: "31536000" });
-    if (error) {
-      console.error("Foto-Upload fehlgeschlagen:", error);
-      return null;
+// Fotos parallel in Supabase Storage hochladen, liefert die öffentlichen URLs.
+// Schlägt ein Upload fehl, wird der Fehler geworfen – der Eintrag bleibt dann
+// im Zwischenspeicher und wird später erneut versucht.
+const uploadPhotos = (blobs) => Promise.all(blobs.map(async (blob) => {
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const { error } = await supabase.storage
+    .from("bench-photos")
+    .upload(fileName, blob, { contentType: "image/jpeg", cacheControl: "31536000" });
+  if (error) throw error;
+  return supabase.storage.from("bench-photos").getPublicUrl(fileName).data.publicUrl;
+}));
+
+// Kein Empfang, Zeitüberschreitung oder Serverproblem → später erneut versuchen.
+// Andere Fehler (z. B. von der Datenbank abgelehnt) würden auch beim nächsten Versuch scheitern.
+const isNetworkError = (err) =>
+  !navigator.onLine ||
+  ["TypeError", "AbortError", "StorageUnknownError"].includes(err?.name) ||
+  /fetch|network|load failed|abort|timeout/i.test(err?.message || "") ||
+  Number(err?.status || err?.statusCode) >= 500;
+
+// Einen zwischengespeicherten Eintrag (neue Bank oder Kommentar) hochladen.
+// Der Fortschritt wird nach jedem Schritt gesichert, damit nach einem Abbruch
+// weder Fotos noch die Bank doppelt angelegt werden.
+const sendOutboxItem = async (item) => {
+  const persist = () => item.key != null && outboxPut(item);
+  if (!item.photoUrls) {
+    item.photoUrls = await uploadPhotos(item.photos);
+    item.photos = [];
+    await persist();
+  }
+  const photoFields = { photo_url: item.photoUrls[0] || null, photo_urls: item.photoUrls };
+  if (item.type === "bench") {
+    if (!item.benchId) {
+      const { data, error } = await supabase.from("benches").insert({ ...item.bench, ...photoFields }).select("id").single();
+      if (error) throw error;
+      item.benchId = data.id;
+      await persist();
     }
-    return supabase.storage.from("bench-photos").getPublicUrl(fileName).data.publicUrl;
-  }));
-  return urls.filter(Boolean);
+    // Bewertung vom Ersteller
+    const { error } = await supabase.from("comments").insert({
+      bench_id: item.benchId, user_name: item.bench.user_name, rating: item.rating, text: null,
+    });
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("comments").insert({ ...item.comment, ...photoFields });
+    if (error) throw error;
+  }
+  if (item.key != null) await outboxDelete(item.key);
+};
+
+const OFFLINE_MSG = "📴 Kein Empfang – gespeichert. Wird automatisch hochgeladen, sobald wieder Netz da ist.";
+
+// Datensatz aus Supabase ins App-Format bringen
+const mapBench = (b) => {
+  const cms = b.comments || [];
+  return {
+    id: b.id, lat: b.lat, lng: b.lng,
+    title: b.title,
+    description: b.description || "",
+    photo: photoList(b)[0] || null,
+    photos: photoList(b),
+    user: b.user_name,
+    date: new Date(b.created_at).toISOString().split("T")[0],
+    ratings: cms.map(c => c.rating).filter(Boolean),
+    comments: cms
+      .filter(c => c.text || photoList(c).length)
+      .map(c => ({
+        id: c.id,
+        user: c.user_name,
+        text: c.text,
+        rating: c.rating,
+        photo: photoList(c)[0] || null,
+        photos: photoList(c),
+        date: new Date(c.created_at).toISOString().split("T")[0],
+      })),
+  };
 };
 
 // Auswahl von bis zu MAX_PHOTOS Fotos mit Vorschau-Kacheln
@@ -211,6 +274,13 @@ export default function App() {
   const [trailPoints, setTrailPoints] = useState(null); // geparste Punkte der gewählten GPX-Datei
   const [trailFileName, setTrailFileName] = useState("");
   const [trailSubmitting, setTrailSubmitting] = useState(false);
+  // Offline: wartende Einträge im Zwischenspeicher / Anzeige aus dem Offline-Cache
+  const [pendingCount, setPendingCount] = useState(0);
+  const [offlineData, setOfflineData] = useState(false);
+  const syncRef = useRef({ running: false, again: false, fresh: new Set() });
+  const benchesLoadedRef = useRef(false);
+  const selRef = useRef(null);
+  selRef.current = sel;
 
   // Hash-basierter Admin-Zugang: #admin in der URL öffnet das Admin-Panel
   useEffect(() => {
@@ -298,11 +368,17 @@ export default function App() {
     }
   }, [userPos, flewToUser, mapSize]);
 
-  const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
+  const toastTimerRef = useRef(null);
+  const flash = (m, ms = 2500) => {
+    setToast(m);
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), ms);
+  };
 
-  // Bänke laden (nur Marker-Daten, keine Kommentare)
-  const fetchBenches = useCallback(async () => {
-    setLoading(true);
+  // Bänke laden (nur Marker-Daten, keine Kommentare).
+  // Ohne Empfang wird der zuletzt geladene Stand aus dem Offline-Cache angezeigt.
+  const fetchBenches = useCallback(async ({ silent } = {}) => {
+    if (!silent) setLoading(true);
     setFetchError(null);
     try {
       const { data, error } = await supabase
@@ -312,33 +388,20 @@ export default function App() {
 
       if (error) throw error;
 
-      setBenches(data.map(b => {
-        const cms = b.comments || [];
-        return {
-          id: b.id, lat: b.lat, lng: b.lng,
-          title: b.title,
-          description: b.description || "",
-          photo: photoList(b)[0] || null,
-          photos: photoList(b),
-          user: b.user_name,
-          date: new Date(b.created_at).toISOString().split("T")[0],
-          ratings: cms.map(c => c.rating).filter(Boolean),
-          comments: cms
-            .filter(c => c.text || photoList(c).length)
-            .map(c => ({
-              id: c.id,
-              user: c.user_name,
-              text: c.text,
-              rating: c.rating,
-              photo: photoList(c)[0] || null,
-              photos: photoList(c),
-              date: new Date(c.created_at).toISOString().split("T")[0],
-            })),
-        };
-      }));
+      benchesLoadedRef.current = true;
+      setBenches(data.map(mapBench));
+      setOfflineData(false);
+      cacheSet("benches", data).catch(() => {});
     } catch (e) {
       console.error("Fehler beim Laden:", e);
-      setFetchError(`Fehler beim Laden der Bänke: ${e.message}`);
+      const cached = await cacheGet("benches").catch(() => null);
+      if (cached) {
+        benchesLoadedRef.current = true;
+        setBenches(cached.map(mapBench));
+        setOfflineData(true);
+      } else if (!silent) {
+        setFetchError(`Fehler beim Laden der Bänke: ${e.message}`);
+      }
     }
     setLoading(false);
   }, []);
@@ -401,12 +464,109 @@ export default function App() {
   // Wanderwege laden
   const fetchTrails = useCallback(async () => {
     const { data, error } = await supabase.from("trails").select("id, name, color, points");
-    if (!error && data) setTrails(data);
+    if (!error && data) {
+      setTrails(data);
+      cacheSet("trails", data).catch(() => {});
+    } else {
+      const cached = await cacheGet("trails").catch(() => null);
+      if (cached) setTrails(cached);
+    }
   }, []);
 
-  // Beim Start laden
-  useEffect(() => { fetchBenches(); }, [fetchBenches]);
+  // Beim Start laden – der Offline-Cache wird sofort angezeigt, bis die
+  // aktuellen Daten da sind (bei schwachem Empfang kann das dauern)
+  useEffect(() => {
+    cacheGet("benches").then(raw => {
+      if (raw && !benchesLoadedRef.current) { setBenches(raw.map(mapBench)); setLoading(false); }
+    }).catch(() => {});
+    fetchBenches();
+  }, [fetchBenches]);
   useEffect(() => { fetchTrails(); }, [fetchTrails]);
+
+  // Zwischengespeicherte Einträge hochladen. Bricht beim ersten Netzwerkfehler ab
+  // (dann scheitern die übrigen auch) und versucht es beim nächsten Anlass erneut.
+  const syncOutbox = useCallback(async () => {
+    const s = syncRef.current;
+    if (s.running) { s.again = true; return; }
+    s.running = true;
+    const sent = [];
+    let offline = false;
+    try {
+      do {
+        s.again = false;
+        const items = await outboxAll();
+        setPendingCount(items.length);
+        if (!navigator.onLine) { offline = items.length > 0; break; }
+        for (const item of items) {
+          try {
+            await sendOutboxItem(item);
+            sent.push(item);
+          } catch (e) {
+            console.error("Hochladen aus dem Zwischenspeicher fehlgeschlagen:", e);
+            if (isNetworkError(e)) { offline = true; break; }
+            await outboxDelete(item.key);
+            flash(`⚠️ „${item.bench?.title || "Kommentar"}“ konnte nicht gespeichert werden.`, 5000);
+          }
+        }
+      } while (s.again && !offline);
+      const left = await outboxAll();
+      setPendingCount(left.length);
+      if (offline && left.some(i => s.fresh.has(i.key))) flash(OFFLINE_MSG, 5000);
+      else if (sent.length === 1) flash(sent[0].type === "bench" ? "🪑 Bank hinzugefügt!" : "⭐ Bewertung gespeichert!");
+      else if (sent.length > 1) flash(`✅ ${sent.length} gespeicherte Einträge hochgeladen`);
+    } catch (e) {
+      console.error("Zwischenspeicher nicht verfügbar:", e);
+    } finally {
+      s.fresh.clear();
+      s.running = false;
+    }
+    if (sent.length) fetchBenches({ silent: true });
+    // Offene Detailansicht aktualisieren, wenn ein Kommentar dazu hochgeladen wurde
+    const open = selRef.current;
+    if (open && sent.some(i => i.type === "review" && i.comment.bench_id === open.id)) fetchCommentsFor(open);
+  }, [fetchBenches, fetchCommentsFor]);
+
+  // Hochladen beim Start, wenn das Netz zurückkommt und wenn die App wieder in den Vordergrund kommt
+  useEffect(() => {
+    const onOnline = () => { syncOutbox(); fetchBenches({ silent: true }); };
+    const onVisible = () => { if (document.visibilityState === "visible") syncOutbox(); };
+    syncOutbox();
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [syncOutbox, fetchBenches]);
+
+  // Im Funkloch meldet das Handy oft trotzdem "online" – solange etwas wartet,
+  // regelmäßig erneut versuchen
+  useEffect(() => {
+    if (!pendingCount && !offlineData) return;
+    const id = setInterval(() => {
+      if (pendingCount) syncOutbox();
+      if (offlineData) fetchBenches({ silent: true });
+    }, 30000);
+    return () => clearInterval(id);
+  }, [pendingCount, offlineData, syncOutbox, fetchBenches]);
+
+  // Eintrag zwischenspeichern und sofort hochzuladen versuchen. Ohne Empfang bleibt
+  // er im Zwischenspeicher und wird automatisch hochgeladen, sobald wieder Netz da ist.
+  const queueAndSend = async (item) => {
+    let key = null;
+    try {
+      key = await outboxAdd(item);
+    } catch (e) {
+      // Zwischenspeicher nicht verfügbar (z. B. privater Modus): direkt hochladen
+      console.warn("Zwischenspeicher nicht verfügbar, lade direkt hoch:", e);
+      await sendOutboxItem(item);
+      flash(item.type === "bench" ? "🪑 Bank hinzugefügt!" : "⭐ Bewertung gespeichert!");
+      fetchBenches({ silent: true });
+      return;
+    }
+    syncRef.current.fresh.add(key);
+    syncOutbox(); // läuft im Hintergrund, das Formular wird nicht blockiert
+  };
 
   // Deep-Link aus der Tagesbericht-E-Mail: #bank-<id> öffnet direkt die
   // Detailansicht der jeweiligen Bank. Da die Bänke asynchron geladen werden,
@@ -564,42 +724,23 @@ export default function App() {
     setSubmitting(true);
 
     try {
-      // Fotos in Supabase Storage hochladen
-      const photoUrls = await uploadPhotos(newPhotos);
-
-      const { data, error } = await supabase
-        .from("benches")
-        .insert({
+      await queueAndSend({
+        type: "bench",
+        createdAt: Date.now(),
+        photos: newPhotos.map(p => p.blob),
+        bench: {
           title: newTitle.trim(),
           description: newDesc.trim() || null,
           lat: newPos.lat,
           lng: newPos.lng,
-          photo_url: photoUrls[0] || null,
-          photo_urls: photoUrls,
           user_name: newUser.trim(),
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error("Fehler beim Speichern:", error);
-        flash("Fehler beim Speichern!");
-        return;
-      }
-
-      // Bewertung vom Ersteller einfügen
-      await supabase.from("comments").insert({
-        bench_id: data.id,
-        user_name: newUser.trim(),
+        },
         rating: newRating,
-        text: null,
       });
 
       localStorage.setItem("bankbank_user", newUser.trim());
       newPhotos.forEach(p => URL.revokeObjectURL(p.preview));
       setNewTitle(""); setNewDesc(""); setNewPhotos([]); setNewRating(0); setNewPos(null); setView("map");
-      flash("🪑 Bank hinzugefügt!");
-      fetchBenches();
     } catch (e) {
       console.error("Fehler:", e);
       flash("Fehler beim Speichern!");
@@ -622,32 +763,22 @@ export default function App() {
     revSubmittingRef.current = true;
     setRevSubmitting(true);
     try {
-      // Fotos in Supabase Storage hochladen (falls vorhanden)
-      const photoUrls = await uploadPhotos(revPhotos);
-
-      const { error } = await supabase.from("comments").insert({
-        bench_id: sel.id,
-        user_name: revUser.trim(),
-        rating: revRating || null,
-        text: revText.trim() || null,
-        photo_url: photoUrls[0] || null,
-        photo_urls: photoUrls,
+      await queueAndSend({
+        type: "review",
+        createdAt: Date.now(),
+        photos: revPhotos.map(p => p.blob),
+        comment: {
+          bench_id: sel.id,
+          user_name: revUser.trim(),
+          rating: revRating || null,
+          text: revText.trim() || null,
+        },
       });
-      if (error) {
-        console.error("Fehler beim Speichern der Bewertung:", error);
-        flash("Fehler beim Speichern!");
-        return;
-      }
       localStorage.setItem("bankbank_user", revUser.trim());
       setRevRating(0);
       setRevText("");
       revPhotos.forEach(p => URL.revokeObjectURL(p.preview));
       setRevPhotos([]);
-      flash("⭐ Bewertung gespeichert!");
-      // Detail neu laden, damit Mittelwert + Liste aktuell sind
-      await fetchCommentsFor(sel);
-      // Marker-Liste auch aktualisieren (Mittelwert in Karte/Liste)
-      fetchBenches();
     } catch (e) {
       console.error("Fehler:", e);
       flash("Fehler beim Speichern!");
@@ -875,6 +1006,15 @@ export default function App() {
         )}
       </div>
 
+      {/* Offline-Hinweis: Anzeige aus dem Cache bzw. wartende Einträge */}
+      {(offlineData || pendingCount > 0) && (
+        <div style={{ flexShrink: 0, background: "#FFF4DC", color: T.txt, borderBottom: `1px solid ${T.brd}`, padding: "5px 12px", fontSize: 12, textAlign: "center" }}>
+          {offlineData && "📴 Kein Empfang – zeige zuletzt geladene Bänke"}
+          {offlineData && pendingCount > 0 && " · "}
+          {pendingCount > 0 && `⏳ ${pendingCount} ${pendingCount === 1 ? "Eintrag wartet" : "Einträge warten"} auf Upload`}
+        </div>
+      )}
+
       {/* === ERROR STATE (nur bei Fehler, blockiert Karte) === */}
       {fetchError && view === "map" && (
         <div style={{ flex: 1, background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
@@ -891,7 +1031,7 @@ export default function App() {
 
           {/* OSM Tiles */}
           {tiles.map(t => (
-            <img key={t.key} src={t.url} alt="" draggable={false}
+            <img key={t.key} src={t.url} crossOrigin="anonymous" alt="" draggable={false}
               style={{ position: "absolute", left: t.x, top: t.y, width: t.size, height: t.size, pointerEvents: "none", imageRendering: "auto" }}
             />
           ))}
@@ -1038,7 +1178,7 @@ export default function App() {
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 11, opacity: .7 }}>📍 von {sel.user} · {sel.date}</p>
           </div>
-          {sel.photos?.length > 0 && <div style={{ margin: "0 16px", marginTop: -14, display: "flex", flexDirection: "column", gap: 8 }}>{sel.photos.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 420, objectFit: "cover", display: "block", borderRadius: 16 }} />)}</div>}
+          {sel.photos?.length > 0 && <div style={{ margin: "0 16px", marginTop: -14, display: "flex", flexDirection: "column", gap: 8 }}>{sel.photos.map(url => <img key={url} src={url} crossOrigin="anonymous" alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 420, objectFit: "cover", display: "block", borderRadius: 16 }} />)}</div>}
           <div style={{ padding: 16 }}>
             <button onClick={() => { setCLat(sel.lat); setCLng(sel.lng); setZoom(17); goHome(); }} style={{ display: "block", width: "100%", padding: "12px 16px", borderRadius: 12, border: "none", background: T.pri, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>📍 Zeige in der Karte</button>
             <div style={{ background: "#fff", borderRadius: 16, padding: 16, border: `1px solid ${T.brd}`, marginBottom: 12 }}>
@@ -1059,7 +1199,7 @@ export default function App() {
                     <span style={{ fontWeight: 700, fontSize: 13 }}>{c.user}</span>{c.rating ? <Stars rating={c.rating} size={11} /> : null}
                   </div>
                   {c.text && <p style={{ margin: 0, fontSize: 13, color: T.mut }}>{c.text}</p>}
-                  {c.photos?.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 300, objectFit: "cover", borderRadius: 10, marginTop: 6, display: "block" }} />)}
+                  {c.photos?.map(url => <img key={url} src={url} crossOrigin="anonymous" alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 300, objectFit: "cover", borderRadius: 10, marginTop: 6, display: "block" }} />)}
                   <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
                 </div>
               ))}
@@ -1162,7 +1302,7 @@ export default function App() {
             return (
               <div key={b.id} onClick={() => { selectBench(b); }} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}`, cursor: "pointer", display: "flex", gap: 12 }}>
                 <div style={{ flexShrink: 0, width: 64, display: "flex", flexDirection: "column", gap: 4 }}>
-                  {b.photo && <img src={b.photo} alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10 }} />}
+                  {b.photo && <img src={b.photo} crossOrigin="anonymous" alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10 }} />}
                   <span style={{ fontSize: 12, color: T.mut, textAlign: "center", wordBreak: "break-word" }}>{b.user}</span>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1330,6 +1470,7 @@ export default function App() {
                   <div key={url} style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
                     <img
                       src={url}
+                      crossOrigin="anonymous"
                       alt=""
                       style={{
                         maxWidth: "100%",
@@ -1367,7 +1508,7 @@ export default function App() {
                             <Stars rating={editCommentRating} size={22} interactive onRate={setEditCommentRating} />
                             <textarea value={editCommentText} onChange={e => setEditCommentText(e.target.value)} rows={3}
                               style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.brd}`, fontSize: 16, fontFamily: "system-ui", background: "#fff", color: T.txt, outline: "none", resize: "vertical" }} />
-                            {c.photos?.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, display: "block" }} />)}
+                            {c.photos?.map(url => <img key={url} src={url} crossOrigin="anonymous" alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, display: "block" }} />)}
                             <div style={{ display: "flex", gap: 8 }}>
                               <button onClick={() => { setEditComment(null); setEditCommentText(""); setEditCommentRating(0); }}
                                 style={{ flex: 1, padding: 8, borderRadius: 10, border: `1px solid ${T.brd}`, background: "#fff", color: T.txt, fontSize: 12, cursor: "pointer" }}>Abbrechen</button>
@@ -1382,7 +1523,7 @@ export default function App() {
                               <Stars rating={c.rating} size={11} />
                             </div>
                             {c.text && <p style={{ margin: 0, fontSize: 12, color: T.txt, lineHeight: 1.4 }}>{c.text}</p>}
-                            {c.photos?.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, marginTop: 6, display: "block" }} />)}
+                            {c.photos?.map(url => <img key={url} src={url} crossOrigin="anonymous" alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 8, marginTop: 6, display: "block" }} />)}
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
                               <span style={{ fontSize: 10, color: T.mut }}>{c.date}</span>
                               <div style={{ display: "flex", gap: 6 }}>
@@ -1428,7 +1569,7 @@ export default function App() {
           {!adminDetail && adminSortedBenches.map(b => (
             <div key={b.id} style={{ background: "#fff", borderRadius: 14, margin: "8px 16px", padding: 14, border: `1px solid ${T.brd}` }}>
               <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                {b.photo && <img src={b.photo} alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10, flexShrink: 0 }} />}
+                {b.photo && <img src={b.photo} crossOrigin="anonymous" alt="" loading="lazy" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10, flexShrink: 0 }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h3 style={{ margin: "0 0 3px", fontSize: 15 }}>{b.title}</h3>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
@@ -1456,7 +1597,7 @@ export default function App() {
                           <Stars rating={c.rating} size={10} />
                         </div>
                         {c.text && <p style={{ margin: 0, fontSize: 11, color: T.mut, lineHeight: 1.4 }}>{c.text}</p>}
-                        {c.photos?.map(url => <img key={url} src={url} alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 180, objectFit: "cover", borderRadius: 6, marginTop: 4, display: "block" }} />)}
+                        {c.photos?.map(url => <img key={url} src={url} crossOrigin="anonymous" alt="" loading="lazy" style={{ width: "100%", height: "auto", maxHeight: 180, objectFit: "cover", borderRadius: 6, marginTop: 4, display: "block" }} />)}
                         <span style={{ fontSize: 9, color: T.mut }}>{c.date}</span>
                       </div>
                     ))}
@@ -1478,7 +1619,7 @@ export default function App() {
         </div>
       )}
 
-      {toast && <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: T.priDk, color: "#fff", padding: "10px 20px", borderRadius: 30, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,.2)", whiteSpace: "nowrap" }}>{toast}</div>}
+      {toast && <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: T.priDk, color: "#fff", padding: "10px 20px", borderRadius: 30, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,.2)", maxWidth: "calc(100vw - 32px)", width: "max-content", boxSizing: "border-box", textAlign: "center" }}>{toast}</div>}
     </div>
   );
 }

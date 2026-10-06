@@ -37,12 +37,24 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
+          // Kartenkacheln: bereits angesehene Gebiete sind auch ohne Empfang sichtbar
           {
-            urlPattern: /^https:\/\/.*basemaps\.cartocdn\.com\/.*/i,
+            urlPattern: /^https:\/\/[a-c]\.tile\.opentopomap\.org\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'map-tiles',
-              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              expiration: { maxEntries: 1000, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          // Bank- und Kommentarfotos: einmal angesehen, auch offline verfügbar
+          {
+            urlPattern: /\/storage\/v1\/object\/public\/bench-photos\//i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'bench-photos',
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 60, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [200] },
             },
           },
         ],
