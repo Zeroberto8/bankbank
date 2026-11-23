@@ -18,7 +18,9 @@ language sql stable security definer set search_path = ''
 as $$
   select exists (
     select 1 from vault.decrypted_secrets
-    where name = 'daily_report_cron_secret' and decrypted_secret = secret
+    -- $1 statt "secret": vault.decrypted_secrets hat selbst eine Spalte "secret"
+    -- (verschlüsselt), die sonst Vorrang vor dem Parameter hätte
+    where name = 'daily_report_cron_secret' and decrypted_secret = $1
   )
 $$;
 revoke all on function public.check_report_secret(text) from public, anon, authenticated;
