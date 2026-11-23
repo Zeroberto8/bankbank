@@ -39,7 +39,10 @@ select cron.schedule(
       'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzdnhraWtyYWVkZmZndnB0dG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjk4NTksImV4cCI6MjA4ODY0NTg1OX0.58ssEBkGF6NvK6Lk99cvXyDv5tRtkNpkbfocdfh180U',
       'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'daily_report_cron_secret')
     ),
-    body    := '{}'::jsonb
+    body    := '{}'::jsonb,
+    -- Standard sind nur 5 s – das reicht für Kaltstart + DB + Resend nicht,
+    -- der Aufruf wird sonst abgebrochen und es kommt keine Mail an
+    timeout_milliseconds := 60000
   );
   $$
 );
